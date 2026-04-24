@@ -1,8 +1,8 @@
 #include <dpp/dpp.h>
 #include <cstdlib>
-#include "Config.hpp"
-#include "Discord_Commands.hpp"
-#include "CommandRegistry.hpp";
+#include "core/Config.hpp"
+#include "commands/Discord_Commands.hpp"
+#include "core/CommandRegistry.hpp";
 
 int main() {
 	/* disabled for now */

@@ -18,6 +18,22 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="include\commands\Discord_Commands.hpp" />
+    <ClInclude Include="include\core\CommandRegistry.hpp" />
+    <ClInclude Include="include\core\Config.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\commands\Bracket.cpp" />
+    <ClCompile Include="src\commands\Fundamentals.cpp" />
+    <ClCompile Include="src\commands\General.cpp" />
+    <ClCompile Include="src\commands\main.cpp" />
+    <ClCompile Include="src\commands\Misc.cpp" />
+    <ClCompile Include="src\commands\Moderation.cpp" />
+    <ClCompile Include="src\commands\Player.cpp" />
+    <ClCompile Include="src\commands\TETRIO.cpp" />
+    <ClCompile Include="src\core\CommandRegistry.cpp" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>18.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
@@ -105,6 +121,7 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -120,28 +137,13 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
-  <ItemGroup>
-    <ClCompile Include="Bracket.cpp" />
-    <ClCompile Include="CommandRegistry.cpp" />
-    <ClCompile Include="Fundamentals.cpp" />
-    <ClCompile Include="General.cpp" />
-    <ClCompile Include="main.cpp" />
-    <ClCompile Include="Misc.cpp" />
-    <ClCompile Include="Moderation.cpp" />
-    <ClCompile Include="Player.cpp" />
-    <ClCompile Include="TETRIO.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="CommandRegistry.hpp" />
-    <ClInclude Include="Config.hpp" />
-    <ClInclude Include="Discord_Commands.hpp" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

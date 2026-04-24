@@ -1,4 +1,4 @@
-#include "CommandRegistry.hpp"
+#include "core/CommandRegistry.hpp"
 
 //Register all command handlers here (This will include hundreds, or even thousands of command handlers, so it's best to keep them organized in a separate file like this)
 void register_all_commands(dpp::cluster& bot) {	
