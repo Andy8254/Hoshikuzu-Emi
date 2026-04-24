@@ -1,0 +1,12 @@
+# Secrets
+.env
+config.json
+
+# Build
+x64/
+Debug/
+Release/
+
+# VS
+.vs/
+*.vcxproj.user
