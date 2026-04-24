@@ -22,6 +22,7 @@
     <ClInclude Include="include\commands\Discord_Commands.hpp" />
     <ClInclude Include="include\core\CommandRegistry.hpp" />
     <ClInclude Include="include\core\Config.hpp" />
+    <ClInclude Include="include\core\Markdown.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\commands\Bracket.cpp" />
@@ -33,6 +34,12 @@
     <ClCompile Include="src\commands\Player.cpp" />
     <ClCompile Include="src\commands\TETRIO.cpp" />
     <ClCompile Include="src\core\CommandRegistry.cpp" />
+    <ClCompile Include="src\core\Markdown.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include=".gitignore" />
+    <None Include="resources\help\fundamentals\info.md" />
+    <None Include="resources\help\fundamentals\list.md" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>18.0</VCProjectVersion>

@@ -18,6 +18,8 @@ void register_all_commands(dpp::cluster& bot) {
 				.add_field("Version", "alpha1", true)
 				.add_field("Library", "DPP(C++20)", true)
 				.add_field("Latency", std::to_string(bot.rest_ping) + " ms", true)
+				.add_field("Developer", "Kyoung-Hwan \"Andy8254\" Choi(Stacking Arena)", true)
+				.add_field("Contact(E-mail)", "ajm8254@gmail.com", true)
 				.set_footer(dpp::embed_footer().set_text("Stacking Arena : We connect the world with puzzle games."))
 				.set_timestamp(time(0));
 			event.reply(dpp::message().add_embed(info_embed));
