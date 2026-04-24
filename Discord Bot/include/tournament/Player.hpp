@@ -6,6 +6,7 @@
 //can be manually tinkered with (only when directly connected with Discord ID) 
 enum class Platform {
 	TETRIO,
+	JStris,
 	PPT2,
 	NES,
 	Tetra_eSports,

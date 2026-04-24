@@ -5,10 +5,6 @@
 #include "core/CommandRegistry.hpp";
 
 int main() {
-	/* disabled for now */
-	//const std::string token = std::getenv("BOT_TOKEN");
-	
-	//for test purposes only
 	dpp::cluster bot(get_bot_token());
 	register_all_commands(bot);
 
