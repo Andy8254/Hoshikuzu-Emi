@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="Discord Bot/Discord Bot.vcxproj" Id="205d0f2e-2676-4763-b372-44af9bd821f6" />
+</Solution>
