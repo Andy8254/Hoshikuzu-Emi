@@ -4,7 +4,7 @@ Copyright (c) 2026 Kyoung-Hwan "Andy8254" Choi/Stacking Arena
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
+in the Software without restriction, including, without limitation, the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 copies of the Software, and to permit persons to whom the Software is
 furnished to do so, subject to the following conditions:
@@ -38,3 +38,10 @@ License: MIT
 Source: https://dpp.dev/  
 
 Full license text: see /licenses/dpp.txt
+
+### SQLite
+Copyright (c) SQLite authors (D. Richard Hipp and contributors)  
+License: Public Domain  
+Source: https://www.sqlite.org/
+
+SQLite is released into the public domain. To the extent possible under law, its authors have waived all copyright and related rights.
