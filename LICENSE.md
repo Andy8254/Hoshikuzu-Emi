@@ -1,4 +1,4 @@
-MIT License
+## MIT License
 
 Copyright (c) 2026 Kyoung-Hwan "Andy8254" Choi/Stacking Arena
 
@@ -19,3 +19,22 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## Third-party libraries
+
+This project uses the following third-party libraries:
+
+### libcurl
+Copyright (c) Daniel Stenberg and contributors  
+License: curl license (MIT/X derivative)  
+Source: https://curl.se/docs/copyright.html  
+
+Full license text: see /licenses/libcurl.txt
+
+
+### DPP (D++ Discord library)
+Copyright (c) Craig Edwards and DPP contributors  
+License: MIT  
+Source: https://dpp.dev/  
+
+Full license text: see /licenses/dpp.txt
