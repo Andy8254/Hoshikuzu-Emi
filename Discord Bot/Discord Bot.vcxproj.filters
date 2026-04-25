@@ -15,43 +15,78 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Main.cpp">
+    <ClCompile Include="src\commands\Bracket.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Fundamentals.cpp">
+    <ClCompile Include="src\commands\Fundamentals.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="General.cpp">
+    <ClCompile Include="src\commands\General.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="TETRIO.cpp">
+    <ClCompile Include="src\commands\main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Player.cpp">
+    <ClCompile Include="src\commands\Misc.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Bracket.cpp">
+    <ClCompile Include="src\commands\Moderation.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Moderation.cpp">
+    <ClCompile Include="src\commands\Player.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Misc.cpp">
+    <ClCompile Include="src\commands\TETRIO.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="CommandRegistry.cpp">
+    <ClCompile Include="src\core\CommandRegistry.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\Markdown.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\tournament\Tournament.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Config.hpp">
+    <ClInclude Include="include\commands\Discord_Commands.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Discord_Commands.hpp">
+    <ClInclude Include="include\core\CommandRegistry.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="CommandRegistry.hpp">
+    <ClInclude Include="include\core\Config.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="include\core\Markdown.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\tournament\Bracket.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\tournament\Match.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\tournament\Player.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\tournament\Tournaments.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="resources\help\fundamentals\list.md">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include=".gitignore">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="resources\help\fundamentals\info.md">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="resources\help\fundamentals\ping.md">
+      <Filter>Resource Files</Filter>
+    </None>
   </ItemGroup>
 </Project>

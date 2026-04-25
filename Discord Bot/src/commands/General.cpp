@@ -4,13 +4,27 @@
 //General Section, even though this will be a FAQ section since the basic commands were already registered in Fundamentals.cpp...
 void register_general_commands(dpp::cluster& bot) {
 	//Section List
-	handlers["help"] = [&bot](const dpp::slashcommand_t& event) {
+	auto bot_ptr = &bot;
 
+	handlers["codex"] = [bot_ptr](const dpp::slashcommand_t& event) {
 		std::string category, command;
-		if (event.get_parameter("category").index() != 0) {
+		auto cat_param = event.get_parameter("category");
+
+		//Debug Code
+		std::cout << "category index = " << event.get_parameter("category").index() << "\n";
+		std::cout << "category = [" << category << "]\n";
+
+		if (std::holds_alternative<std::string>(cat_param)) {
 			category = std::get<std::string>(event.get_parameter("category"));
 		}
-		if (event.get_parameter("command").index() != 0) {
+
+		auto cmd_param = event.get_parameter("command");
+
+		//Debug Code
+		std::cout << "command index = " << event.get_parameter("command").index() << "\n";
+		std::cout << "command = [" << command << "]\n";
+
+		if (std::holds_alternative<std::string>(cmd_param)) {
 			command = std::get<std::string>(event.get_parameter("command"));
 		}
 
@@ -21,7 +35,7 @@ void register_general_commands(dpp::cluster& bot) {
 			dpp::embed help_embed = dpp::embed()
 				.set_title("Help Menu")
 				.set_description("Select a category to view commands.")
-				.set_thumbnail(bot.me.get_avatar_url())
+				.set_thumbnail(bot_ptr->me.get_avatar_url())
 				.set_color(0xB0D28F)
 				.add_field("Basic", "`/help fundamentals`", true)
 				.add_field("General", "`/help general`", true)
@@ -39,8 +53,12 @@ void register_general_commands(dpp::cluster& bot) {
 		}
 
 		if (command.empty()) {
-			std::string path = "resources/help/" + category + "list.md";
+			std::string path = "resources/help/" + category + "/list.md";
 			std::string content = md::read_file(path);
+
+			//Debug Code
+			std::cout << "path = " << path << "\n";
+			std::cout << "content length = " << content.size() << "\n";
 
 			if (content.empty()) {
 				event.reply("Category not found. Please check your spelling and try again.");
@@ -49,7 +67,7 @@ void register_general_commands(dpp::cluster& bot) {
 
 			auto msg = md::to_message(content);
 			if (!msg.embeds.empty()) {
-				msg.embeds[0].set_thumbnail(bot.me.get_avatar_url());
+				msg.embeds[0].set_thumbnail(bot_ptr->me.get_avatar_url());
 			}
 
 			event.reply(msg);
@@ -58,6 +76,10 @@ void register_general_commands(dpp::cluster& bot) {
 
 		std::string path = "resources/help/" + category + "/" + command + ".md";
 		std::string content = md::read_file(path);
+
+		//Debug Code
+		std::cout << "path = " << path << "\n";
+		std::cout << "content length = " << content.size() << "\n";
 
 		if (content.empty()) {
 			event.reply("Command not found. Please check your spelling and try again.");

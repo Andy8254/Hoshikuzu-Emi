@@ -45,6 +45,7 @@
     <None Include=".gitignore" />
     <None Include="resources\help\fundamentals\info.md" />
     <None Include="resources\help\fundamentals\list.md" />
+    <None Include="resources\help\fundamentals\ping.md" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>18.0</VCProjectVersion>

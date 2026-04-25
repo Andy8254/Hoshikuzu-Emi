@@ -54,4 +54,6 @@ dpp::message md::to_message(const std::string& markdown) {
 			has_description = true;
 		}
 	}
+
+	return dpp::message().add_embed(embed);
 }
