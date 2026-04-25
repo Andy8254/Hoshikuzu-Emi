@@ -23,6 +23,7 @@
     <ClInclude Include="include\core\CommandRegistry.hpp" />
     <ClInclude Include="include\core\Config.hpp" />
     <ClInclude Include="include\core\Markdown.hpp" />
+    <ClInclude Include="include\core\sqlite.hpp" />
     <ClInclude Include="include\tournament\Bracket.hpp" />
     <ClInclude Include="include\tournament\Match.hpp" />
     <ClInclude Include="include\tournament\Player.hpp" />
@@ -39,6 +40,7 @@
     <ClCompile Include="src\commands\TETRIO.cpp" />
     <ClCompile Include="src\core\CommandRegistry.cpp" />
     <ClCompile Include="src\core\Markdown.cpp" />
+    <ClCompile Include="src\core\sqlite.cpp" />
     <ClCompile Include="src\tournament\Tournament.cpp" />
   </ItemGroup>
   <ItemGroup>

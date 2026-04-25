@@ -10,3 +10,4 @@ Release/
 # VS
 .vs/
 *.vcxproj.user
+db/*.db
