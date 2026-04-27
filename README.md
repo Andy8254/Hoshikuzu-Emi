@@ -11,6 +11,7 @@ All supported features in the Core version are as follows:
 
 - Username Registration System w/ Search
 - Help Page
+- Player Information Finder (Basic - 1.0.0) (SQLite-based)
 
 ## In development
 - Internal Tree-based Bracket Management without the use of external APIs
