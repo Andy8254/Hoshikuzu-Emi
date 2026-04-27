@@ -15,7 +15,7 @@ All supported features in the Core version are as follows:
 - Internal Tree-based Bracket Management without the use of external APIs
 - Moderation Feature
 - Visualisation
-- Multilingual Support (
+- Module-based UI Language System & Multilingual Support (Korean)
 
 ## Licence
 This service (Core version) is distributed under the MIT licence.
