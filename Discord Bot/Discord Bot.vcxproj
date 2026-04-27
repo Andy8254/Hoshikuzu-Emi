@@ -22,6 +22,7 @@
     <ClInclude Include="include\commands\Discord_Commands.hpp" />
     <ClInclude Include="include\core\CommandRegistry.hpp" />
     <ClInclude Include="include\core\Config.hpp" />
+    <ClInclude Include="include\core\Fundamentals.hpp" />
     <ClInclude Include="include\core\Markdown.hpp" />
     <ClInclude Include="include\core\sqlite.hpp" />
     <ClInclude Include="include\tournament\Bracket.hpp" />

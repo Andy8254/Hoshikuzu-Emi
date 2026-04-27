@@ -80,6 +80,9 @@
     <ClInclude Include="include\core\sqlite.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="include\core\Fundamentals.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="resources\help\fundamentals\list.md">

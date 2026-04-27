@@ -1,4 +1,5 @@
 #include "core/CommandRegistry.hpp"
+#include "core/Fundamentals.hpp"
 
 //Register all command handlers here (This will include hundreds, or even thousands of command handlers, so it's best to keep them organized in a separate file like this)
 void register_fundamental_commands(dpp::cluster& bot) {
@@ -15,12 +16,17 @@ void register_fundamental_commands(dpp::cluster& bot) {
             .set_color(0xB0D28F)
             .set_thumbnail(bot_ptr->me.get_avatar_url())
             .add_field("Version", "alpha1", true)
-            .add_field("Library", "DPP(C++20)", true)
+            .add_field("Library", "DPP 10.1.4", true)
+            .add_field("Platform", "C++20", true)
             .add_field("Latency", std::to_string(bot_ptr->rest_ping) + " ms", true)
             .add_field("Developer", "Kyoung-Hwan \"Andy8254\" Choi(Stacking Arena)", true)
             .add_field("Contact(E-mail)", "ajm8254@gmail.com", true)
             .set_footer(dpp::embed_footer().set_text("Stacking Arena : We connect the world with puzzle games."))
             .set_timestamp(time(0));
         event.reply(dpp::message().add_embed(info_embed));
-        };
+    };
+
+    handlers["hello"] = [](const dpp::slashcommand_t& event) {
+        event.reply(get_hello_message(event.command.usr.get_mention()));
+    };
 }

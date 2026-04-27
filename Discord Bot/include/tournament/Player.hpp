@@ -11,6 +11,7 @@ enum class Platform {
 	NES,
 	Tetra_eSports,
 	TGM,
+	NES,
 	Other
 };
 

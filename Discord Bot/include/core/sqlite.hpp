@@ -28,7 +28,12 @@ public:
 	static bool register_info(dpp::snowflake id);
 	static bool change_info(dpp::snowflake id, const std::string& platform, const std::string& value);
 	static bool delete_info(dpp::snowflake id);
-
+	static bool exists(dpp::snowflake id);
+	static bool not_found(dpp::snowflake id) { return !exists(id); }
+	static std::map<std::string, std::string> get_profile(dpp::snowflake id);
+	static dpp::snowflake find_by_platform(const std::string& platform, const std::string& handle);
+	static bool unlink_platform(dpp::snowflake id, const std::string& platform);
+	static void send_profile_embed(dpp::cluster& bot, const dpp::slashcommand_t& event, dpp::snowflake target_id);
 private:
 	static Database& get_db();
 };

@@ -1,6 +1,7 @@
 #include "core/sqlite.hpp"
 #include <iostream>
 #include <ctime>
+#include <unordered_set>
 
 Database::Database(const std::string& db_path) {
     //Ensure root/db directory exists
@@ -69,15 +70,20 @@ bool PlayerManager::register_info(dpp::snowflake id) {
         return false;
 
     sqlite3_bind_int64(stmt, 1, (long long)id);
-
     int rc = sqlite3_step(stmt);
+
+    bool was_inserted = (sqlite3_changes(get_db().get_handle()) > 0);
+
     sqlite3_finalize(stmt);
-    return (rc == SQLITE_DONE);
+    return (rc == SQLITE_DONE && was_inserted);
 }
 
 bool PlayerManager::change_info(dpp::snowflake id, const std::string& platform, const std::string& value) {
     // Whitelist check
-    static const std::vector<std::string> allowed = { "tetrio_id", "jstris_id", "ppt2_id", "tec_id" };
+    static const std::vector<std::string> allowed = {
+        "tetrio_id", "jstris_id", "ppt2_id", "tec_id",
+        "tetra_id", "tgm_id", "ctwc_id", "other_id"
+    };
     bool ok = false;
     for (const auto& p : allowed) if (p == platform) ok = true;
     if (!ok) return false;
@@ -104,8 +110,154 @@ bool PlayerManager::delete_info(dpp::snowflake id) {
         return false;
 
     sqlite3_bind_int64(stmt, 1, (long long)id);
+    int rc = sqlite3_step(stmt);
 
+    int affected = sqlite3_changes(get_db().get_handle());
+
+    sqlite3_finalize(stmt);
+    return (rc == SQLITE_DONE && affected > 0);
+}
+
+std::map<std::string, std::string> PlayerManager::get_profile(dpp::snowflake id) {
+    std::map<std::string, std::string> profile;
+    sqlite3_stmt* stmt;
+    const char* sql = "SELECT * FROM player_links WHERE discord_id = ?;";
+
+    if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) == SQLITE_OK) {
+        sqlite3_bind_int64(stmt, 1, (long long)id);
+
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            int cols = sqlite3_column_count(stmt);
+            for (int i = 0; i < cols; i++) {
+                const char* col_name = sqlite3_column_name(stmt, i);
+                const unsigned char* val = sqlite3_column_text(stmt, i);
+                if (val) {
+                    profile[col_name] = reinterpret_cast<const char*>(val);
+                }
+            }
+        }
+    }
+    sqlite3_finalize(stmt);
+    return profile;
+}
+
+dpp::snowflake PlayerManager::find_by_platform(const std::string& platform, const std::string& handle) {
+    dpp::snowflake found_id = 0;
+
+    // 1. Hard Whitelist Check (Critical!)
+    static const std::unordered_set<std::string> allowed_platforms = { "tetrio_id", "jstris_id", "ppt2_id", "tec_id", "tetra_id", "tgm_id", "ctwc_id", "other_id" };
+    if (allowed_platforms.find(platform) == allowed_platforms.end()) {
+        return 0; // Or throw an exception
+    }
+
+    sqlite3_stmt* stmt;
+    // Now the platform concatenation is safe because we verified the string
+    std::string sql = "SELECT discord_id FROM player_links WHERE " + platform + " = ? LIMIT 1;";
+
+    if (sqlite3_prepare_v2(get_db().get_handle(), sql.c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
+        // Use SQLITE_TRANSIENT because 'handle' is a reference that might go out of scope
+        sqlite3_bind_text(stmt, 1, handle.c_str(), -1, SQLITE_TRANSIENT);
+
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            // Using int64 ensures we don't truncate the 64-bit Discord Snowflake
+            found_id = static_cast<dpp::snowflake>(sqlite3_column_int64(stmt, 0));
+        }
+    }
+
+    sqlite3_finalize(stmt);
+    return found_id;
+}
+
+bool PlayerManager::exists(dpp::snowflake id) {
+    sqlite3_stmt* stmt;
+    // 'SELECT 1' is a classic optimization: it returns the number 1 if the row exists
+    const char* sql = "SELECT 1 FROM player_links WHERE discord_id = ? LIMIT 1;";
+
+    if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        return false;
+    }
+
+    sqlite3_bind_int64(stmt, 1, (long long)id);
+
+    // If sqlite3_step returns SQLITE_ROW, it found something
     int rc = sqlite3_step(stmt);
     sqlite3_finalize(stmt);
-    return (rc == SQLITE_DONE);
+
+    return (rc == SQLITE_ROW);
+}
+
+bool PlayerManager::unlink_platform(dpp::snowflake id, const std::string& platform) {
+    static const std::vector<std::string> allowed = {
+        "tetrio_id", "jstris_id", "ppt2_id", "tec_id",
+        "tetra_id", "tgm_id", "ctwc_id", "other_id"
+    };
+
+    bool ok = false;
+    for (const auto& p : allowed) if (p == platform) ok = true;
+    if (!ok) return false;
+
+    sqlite3_stmt* stmt;
+    std::string sql = "UPDATE player_links SET " + platform + " = NULL, last_sync = ? WHERE discord_id = ?;";
+
+    if (sqlite3_prepare_v2(get_db().get_handle(), sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK)
+        return false;
+
+    sqlite3_bind_int64(stmt, 1, (long long)time(nullptr));
+    sqlite3_bind_int64(stmt, 2, (long long)id);
+
+    int rc = sqlite3_step(stmt);
+    int affected = sqlite3_changes(get_db().get_handle());
+    sqlite3_finalize(stmt);
+
+    return (rc == SQLITE_DONE && affected > 0);
+}
+
+void PlayerManager::send_profile_embed(
+    dpp::cluster& bot,
+    const dpp::slashcommand_t& event,
+    dpp::snowflake target_id
+) {
+    auto data = PlayerManager::get_profile(target_id);
+
+    if (data.empty()) {
+        event.reply("⚠️ This user is not registered in the system.");
+        return;
+    }
+
+    auto data_ptr = std::make_shared<std::map<std::string, std::string>>(data);
+
+    bot.user_get(target_id, [event, data_ptr](const dpp::confirmation_callback_t& cb) mutable {
+        if (cb.is_error()) {
+            event.reply("Could not retrieve user data from Discord.");
+            return;
+        }
+
+        dpp::user_identified target_user = std::get<dpp::user_identified>(cb.value);
+
+        dpp::embed embed = dpp::embed()
+            .set_color(0x3498db)
+            .set_title(target_user.username + "'s Profile")
+            .set_thumbnail(target_user.get_avatar_url())
+            .set_timestamp(time(nullptr));
+
+        for (auto const& [platform, handle] : *data_ptr) {
+            if (platform == "discord_id" || platform == "last_sync" || handle.empty()) continue;
+
+            std::string display_name = platform;
+            size_t pos = display_name.find("_id");
+            if (pos != std::string::npos) display_name.erase(pos);
+
+            embed.add_field(display_name, handle, true);
+        }
+
+        if (data_ptr->count("last_sync") && !(*data_ptr)["last_sync"].empty()) {
+            try {
+                embed.set_footer(dpp::embed_footer().set_text("Last updated"));
+                embed.set_timestamp(std::stoll((*data_ptr)["last_sync"]));
+            }
+            catch (...) {}
+        }
+
+        event.reply(dpp::message().add_embed(embed));
+        });
 }
