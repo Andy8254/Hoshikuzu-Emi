@@ -60,6 +60,9 @@
     <ClCompile Include="src\tetrio\TetrioUtils.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\core\security\PermissionManager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\commands\Discord_Commands.hpp">
@@ -99,6 +102,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\tetrio\TetrioUtils.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\core\security\PermissionManager.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

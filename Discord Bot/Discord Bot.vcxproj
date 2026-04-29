@@ -25,6 +25,7 @@
     <ClInclude Include="include\core\Config.hpp" />
     <ClInclude Include="include\core\Fundamentals.hpp" />
     <ClInclude Include="include\core\Markdown.hpp" />
+    <ClInclude Include="include\core\security\PermissionManager.hpp" />
     <ClInclude Include="include\core\sqlite.hpp" />
     <ClInclude Include="include\tetrio\TetrioService.hpp" />
     <ClInclude Include="include\tetrio\TetrioUtils.hpp" />
@@ -45,6 +46,7 @@
     <ClCompile Include="src\core\api_fetcher.cpp" />
     <ClCompile Include="src\core\CommandRegistry.cpp" />
     <ClCompile Include="src\core\Markdown.cpp" />
+    <ClCompile Include="src\core\security\PermissionManager.cpp" />
     <ClCompile Include="src\core\sqlite.cpp" />
     <ClCompile Include="src\tetrio\TetrioService.cpp" />
     <ClCompile Include="src\tetrio\TetrioUtils.cpp" />

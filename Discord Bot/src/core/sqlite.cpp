@@ -258,3 +258,99 @@ void PlayerManager::send_profile_embed(
         event.reply(dpp::message().add_embed(embed));
         });
 }
+
+// --- DB instance ---
+Database& GuildConfigManager::get_db() {
+    static Database instance("db/master.db");
+    return instance;
+}
+
+// --- Init ---
+bool GuildConfigManager::init() {
+    const char* sql =
+        "CREATE TABLE IF NOT EXISTS guild_config ("
+        "guild_id INTEGER PRIMARY KEY,"
+        "tournament_staff_role_id INTEGER,"
+        "tournament_admin_role_id INTEGER"
+        ");";
+
+    return get_db().execute(sql);
+}
+
+bool GuildConfigManager::set_staff_role(dpp::snowflake guild_id, dpp::snowflake role_id) {
+    sqlite3_stmt* stmt;
+
+    const char* sql =
+        "INSERT INTO guild_config (guild_id, tournament_staff_role_id) "
+        "VALUES (?, ?) "
+        "ON CONFLICT(guild_id) DO UPDATE SET "
+        "tournament_staff_role_id = excluded.tournament_staff_role_id;";
+
+    if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK)
+        return false;
+
+    sqlite3_bind_int64(stmt, 1, guild_id);
+    sqlite3_bind_int64(stmt, 2, role_id);
+
+    bool success = (sqlite3_step(stmt) == SQLITE_DONE);
+    sqlite3_finalize(stmt);
+    return success;
+}
+
+dpp::snowflake GuildConfigManager::get_staff_role(dpp::snowflake guild_id) {
+    sqlite3_stmt* stmt;
+    dpp::snowflake result = 0;
+
+    const char* sql =
+        "SELECT tournament_staff_role_id FROM guild_config WHERE guild_id = ? LIMIT 1;";
+
+    if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) == SQLITE_OK) {
+        sqlite3_bind_int64(stmt, 1, guild_id);
+
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            result = static_cast<dpp::snowflake>(sqlite3_column_int64(stmt, 0));
+        }
+    }
+
+    sqlite3_finalize(stmt);
+    return result;
+}
+
+bool GuildConfigManager::set_admin_role(dpp::snowflake guild_id, dpp::snowflake role_id) {
+    sqlite3_stmt* stmt;
+
+    const char* sql =
+        "INSERT INTO guild_config (guild_id, tournament_admin_role_id) "
+        "VALUES (?, ?) "
+        "ON CONFLICT(guild_id) DO UPDATE SET "
+        "tournament_admin_role_id = excluded.tournament_admin_role_id;";
+
+    if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK)
+        return false;
+
+    sqlite3_bind_int64(stmt, 1, guild_id);
+    sqlite3_bind_int64(stmt, 2, role_id);
+
+    bool success = (sqlite3_step(stmt) == SQLITE_DONE);
+    sqlite3_finalize(stmt);
+    return success;
+}
+
+dpp::snowflake GuildConfigManager::get_admin_role(dpp::snowflake guild_id) {
+    sqlite3_stmt* stmt;
+    dpp::snowflake result = 0;
+
+    const char* sql =
+        "SELECT tournament_admin_role_id FROM guild_config WHERE guild_id = ? LIMIT 1;";
+
+    if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) == SQLITE_OK) {
+        sqlite3_bind_int64(stmt, 1, guild_id);
+
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            result = static_cast<dpp::snowflake>(sqlite3_column_int64(stmt, 0));
+        }
+    }
+
+    sqlite3_finalize(stmt);
+    return result;
+}
