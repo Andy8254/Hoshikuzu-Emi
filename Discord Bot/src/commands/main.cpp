@@ -9,7 +9,7 @@ const dpp::snowflake MOD_CHANNEL_ID = 1498301392073396234;
 int main() {
     dpp::cluster bot(get_bot_token());
 
-    // 1. Register logic handlers into the global 'handlers' map
+    //Register logic handlers into the global 'handlers' map
     register_fundamental_commands(bot);
     register_general_commands(bot);
     register_player_commands(bot);   // From Player.cpp 
@@ -87,6 +87,15 @@ int main() {
                 .add_choice(dpp::command_option_choice("Other", "other_id"))
             );
             bot.global_command_create(unlink_p);
+            
+            dpp::slashcommand tetrio_cmd("tetrio", "Get TETR.IO player stats", app_id);
+            tetrio_cmd.add_option(
+                dpp::command_option(dpp::co_string, "username", "TETR.IO username", true)
+            );
+            bot.global_command_create(tetrio_cmd);
+
+            // -- Guild Commands --
+
         }
     });
 

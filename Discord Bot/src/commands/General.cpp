@@ -37,13 +37,13 @@ void register_general_commands(dpp::cluster& bot) {
 				.set_description("Select a category to view commands.")
 				.set_thumbnail(bot_ptr->me.get_avatar_url())
 				.set_color(0xB0D28F)
-				.add_field("Basic", "`/help fundamentals`", true)
-				.add_field("General", "`/help general`", true)
-				.add_field("Player", "`/help player`", true)
-				.add_field("TETR.IO", "`/help tetrio`", true)
-				.add_field("Brackets", "`/help brackets`", true)
-				.add_field("Miscellaneous", "`/help misc`", true)
-				.set_footer(dpp::embed_footer().set_text("Use /help [category] for more information on commands in that category."))
+				.add_field("Basic", "`/codex fundamentals`", true)
+				.add_field("General", "`/codex general`", true)
+				.add_field("Player", "`/codex player`", true)
+				.add_field("TETR.IO", "`/codex tetrio`", true)
+				.add_field("Brackets", "`/codex brackets`", true)
+				.add_field("Miscellaneous", "`/codex misc`", true)
+				.set_footer(dpp::embed_footer().set_text("Use /codex [category] for more information on commands in that category."))
 				.set_timestamp(time(0));
 			//moderation hidden for now since it's reserved for authorised users only and may be expanded in the future
 				//.add_field("Moderation", "`/help moderation`", true);

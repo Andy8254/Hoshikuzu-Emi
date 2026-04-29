@@ -3,6 +3,11 @@
 #include <ctime>
 #include <unordered_set>
 
+static const std::vector<std::string> allowed = {
+    "tetrio_id", "jstris_id", "ppt2_id", "tec_id",
+    "tetra_id", "tgm_id", "ctwc_id", "other_id"
+};
+
 Database::Database(const std::string& db_path) {
     //Ensure root/db directory exists
     std::filesystem::path p(db_path);
@@ -80,10 +85,6 @@ bool PlayerManager::register_info(dpp::snowflake id) {
 
 bool PlayerManager::change_info(dpp::snowflake id, const std::string& platform, const std::string& value) {
     // Whitelist check
-    static const std::vector<std::string> allowed = {
-        "tetrio_id", "jstris_id", "ppt2_id", "tec_id",
-        "tetra_id", "tgm_id", "ctwc_id", "other_id"
-    };
     bool ok = false;
     for (const auto& p : allowed) if (p == platform) ok = true;
     if (!ok) return false;
@@ -145,6 +146,7 @@ dpp::snowflake PlayerManager::find_by_platform(const std::string& platform, cons
     dpp::snowflake found_id = 0;
 
     // 1. Hard Whitelist Check (Critical!)
+    //Duplicates Unavoidable?
     static const std::unordered_set<std::string> allowed_platforms = { "tetrio_id", "jstris_id", "ppt2_id", "tec_id", "tetra_id", "tgm_id", "ctwc_id", "other_id" };
     if (allowed_platforms.find(platform) == allowed_platforms.end()) {
         return 0; // Or throw an exception
@@ -187,11 +189,6 @@ bool PlayerManager::exists(dpp::snowflake id) {
 }
 
 bool PlayerManager::unlink_platform(dpp::snowflake id, const std::string& platform) {
-    static const std::vector<std::string> allowed = {
-        "tetrio_id", "jstris_id", "ppt2_id", "tec_id",
-        "tetra_id", "tgm_id", "ctwc_id", "other_id"
-    };
-
     bool ok = false;
     for (const auto& p : allowed) if (p == platform) ok = true;
     if (!ok) return false;
