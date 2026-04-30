@@ -29,4 +29,23 @@ void register_fundamental_commands(dpp::cluster& bot) {
     handlers["hello"] = [](const dpp::slashcommand_t& event) {
         event.reply(get_hello_message(event.command.usr.get_mention()));
     };
+
+    handlers["privacy"] = [](const dpp::slashcommand_t& event) {
+        event.reply(
+            "📄 **Privacy Notice**\n"
+            "Hi there~ Emi here! 🌸\n"
+            "\n"
+            "I only keep a tiny bit of information so I can help you properly:\n"
+            "• Your Discord ID\n"
+            "• Your linked TETR.IO username\n"
+            "• Server settings (like roles)\n"
+            "\n"
+            "I don't collect anything personal, and I would never sell or share your data.\n"
+            "Everything is safely kept on the host machine I live in~ ✨\n"
+            "\n"
+            "If you ever want your data removed, just use `/unlink` or `/unlink_platform`.\n"
+            "\n"
+            "Full details: <GitHub link>"
+        );
+    };
 }

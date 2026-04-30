@@ -57,6 +57,8 @@
     <None Include="resources\help\fundamentals\info.md" />
     <None Include="resources\help\fundamentals\list.md" />
     <None Include="resources\help\fundamentals\ping.md" />
+    <None Include="resources\legal\privacy.md" />
+    <None Include="resources\legal\terms.md" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>18.0</VCProjectVersion>

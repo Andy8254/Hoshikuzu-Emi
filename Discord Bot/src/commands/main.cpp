@@ -22,6 +22,7 @@ int main() {
 
             // Hello function
             dpp::slashcommand hello("hello", "Say Hello to Emi! Who knows she'll greet you back?", app_id);
+            dpp::slashcommand privacy("privacy", "Show shortened Privacy Policy", app_id);
             bot.global_command_create(hello);
             // --- Existing Codex/Ping/Info ---
             dpp::slashcommand codex("codex", "Show help message", app_id);

@@ -121,5 +121,11 @@
     <None Include="resources\help\fundamentals\ping.md">
       <Filter>Resource Files</Filter>
     </None>
+    <None Include="resources\legal\privacy.md">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="resources\legal\terms.md">
+      <Filter>Resource Files</Filter>
+    </None>
   </ItemGroup>
 </Project>
