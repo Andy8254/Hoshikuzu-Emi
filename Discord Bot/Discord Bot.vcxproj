@@ -29,13 +29,14 @@
     <ClInclude Include="include\core\sqlite.hpp" />
     <ClInclude Include="include\tetrio\TetrioService.hpp" />
     <ClInclude Include="include\tetrio\TetrioUtils.hpp" />
-    <ClInclude Include="include\tournament\Bracket.hpp" />
-    <ClInclude Include="include\tournament\Match.hpp" />
-    <ClInclude Include="include\tournament\Player.hpp" />
+    <ClInclude Include="include\tournament\bracket\Bracket.hpp" />
+    <ClInclude Include="include\tournament\bracket\Match.hpp" />
+    <ClInclude Include="include\tournament\bracket\Player.hpp" />
     <ClInclude Include="include\tournament\Tournaments.hpp" />
+    <ClInclude Include="include\tournament\tournament\base.hpp" />
+    <ClInclude Include="include\tournament\tournament\MatchRules.hpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\commands\Bracket.cpp" />
     <ClCompile Include="src\commands\Fundamentals.cpp" />
     <ClCompile Include="src\commands\General.cpp" />
     <ClCompile Include="src\commands\main.cpp" />
@@ -50,7 +51,8 @@
     <ClCompile Include="src\core\sqlite.cpp" />
     <ClCompile Include="src\tetrio\TetrioService.cpp" />
     <ClCompile Include="src\tetrio\TetrioUtils.cpp" />
-    <ClCompile Include="src\tournament\Tournament.cpp" />
+    <ClCompile Include="src\tournament\bracket\Bracket.cpp" />
+    <ClCompile Include="src\tournament\TournamentService.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include=".gitignore" />

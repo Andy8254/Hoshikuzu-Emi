@@ -1,6 +1,6 @@
 #pragma once
 #include <string>
-#include "Bracket.hpp"
+#include "tournament/bracket/Bracket.hpp"
 
 class Tournament {
 public:
