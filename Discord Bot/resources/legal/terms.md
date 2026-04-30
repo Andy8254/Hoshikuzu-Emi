@@ -6,8 +6,17 @@
 
 ## 1. Acceptance of Terms
 
-By using Hoshikuzu Emi, you agree to these Terms of Service.
-If you do not agree, you should not use the bot.
+By using Hoshikuzu Emi, you agree to these Terms of Service and
+the June 2023 revision of the Puzzle Game Code of Conduct (PGCoC).
+
+The PGCoC is considered an extension of acceptable conduct when using this bot,
+particularly in competitive and tournament-related contexts, in which it may be
+used as a reference when evaluating user behavior.
+
+If you do not agree with these terms, you should not use the bot.
+
+The full PGCoC can be found here:
+https://pgcoc.info/
 
 ---
 
@@ -27,11 +36,14 @@ The service is provided "as is" without guarantees of availability or accuracy.
 
 Users agree not to:
 
-* Abuse or spam commands
-* Attempt to exploit or disrupt the bot
-* Use the bot for unlawful purposes
+- Abuse or spam commands  
+- Attempt to exploit, disrupt, or interfere with the bot  
+- Use the bot for unlawful purposes  
 
-The developer reserves the right to restrict access if misuse is detected.
+The developer reserves the right to restrict or revoke access if misuse is detected.
+
+Violations of these rules may also constitute a breach of the
+Puzzle Game Code of Conduct (PGCoC).
 
 ---
 

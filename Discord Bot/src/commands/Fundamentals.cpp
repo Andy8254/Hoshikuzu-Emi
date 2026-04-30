@@ -45,7 +45,7 @@ void register_fundamental_commands(dpp::cluster& bot) {
             "\n"
             "If you ever want your data removed, just use `/unlink` or `/unlink_platform`.\n"
             "\n"
-            "Full details: <GitHub link>"
+            "Full details: https://github.com/Andy8254/Hoshikuzu-Emi/blob/master/Discord%20Bot/resources/legal/terms.md"
         );
     };
 }
