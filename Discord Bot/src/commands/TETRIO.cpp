@@ -1,6 +1,7 @@
 #include "core/CommandRegistry.hpp"
 #include "tetrio/TetrioService.hpp"
 #include "tetrio/TetrioUtils.hpp"
+#include "core/sqlite.hpp"
 #include <thread>
 
 /*
@@ -11,40 +12,106 @@ All API logic is abstracted into tetrio/TetrioService.
 void register_tetrio_commands(dpp::cluster& bot) {
 	auto bot_ptr = &bot;
 
-	handlers["tetrio"] = [bot_ptr](const dpp::slashcommand_t& event) {
-		std::string username = std::get<std::string>(event.get_parameter("username"));
+    handlers["tetrio"] = [bot_ptr](const dpp::slashcommand_t& event) {
+        std::string username;
 
-		event.thinking();
+        auto username_param = event.get_parameter("username");
 
-		std::thread([event, username]() mutable {
-			auto profile = TetrioService::fetch_user(username);
+        if (username_param.index() != 0) {
+            username = std::get<std::string>(username_param);
+        }
+        else {
+            auto profile = PlayerManager::get_profile(event.command.usr.id);
 
-			if (!profile.has_value()) {
-				event.edit_response("❌ User not found or API error.");
-				return;
-			}
+            if (profile.empty() || !profile.count("tetrio_id") || profile["tetrio_id"].empty()) {
+                event.reply("❌ You haven’t linked a TETR.IO account yet. Use `/link platform:tetrio id:<your_username>` first.");
+                return;
+            }
 
-			//embed generation
-			std::string avatar_url = "https://tetr.io/user-content/avatars/" + profile->id + ".jpg";
+            username = profile["tetrio_id"];
+        }
 
-			dpp::embed embed = dpp::embed()
-				.set_title(profile->username + "'s Profile")
-				.set_url("https://tetr.io/#u/" + profile->username)
-				.set_thumbnail(avatar_url)
-				.set_color(get_rank_colour(profile->rank))
-				.add_field("Rank", profile->rank, true)
-				.add_field("Rating", std::to_string(profile->rating), true)
-				.add_field(
-					"Stats",
-					"**APM**: " + format_double(profile->apm) + "\n" +
-					"**PPS**: " + format_double(profile->pps) + "\n" +
-					"**VS**: " + format_double(profile->vs),
-					true
-				)
-				.set_footer(dpp::embed_footer().set_text("Data retrieved from TETR.IO's TETRA CHANNEL"))
-				.set_timestamp(time(nullptr));
+        event.thinking();
 
-			event.edit_response(dpp::message().add_embed(embed));
-		});
-	};
+        // Copy event for async safety
+        dpp::slashcommand_t ctx = event;
+
+        // --- Async task ---
+        auto fut = std::async(std::launch::async, [ctx, username]() mutable {
+            try {
+                auto profile = TetrioService::fetch_user(username);
+
+                if (!profile) {
+                    ctx.edit_response("❌ User not found or API error.");
+                    return;
+                }
+
+                // --- Formatting ---
+                auto fmt = [](double v, int p = 2) {
+                    std::ostringstream oss;
+                    oss << std::fixed << std::setprecision(p) << v;
+                    return oss.str();
+                    };
+
+                std::string rank_display =
+                    profile->rank.empty() || profile->rank == "Z"
+                    ? "Unranked"
+                    : profile->rank;
+
+                std::string flag = profile->country.empty()
+                    ? ""
+                    : ":flag_" + profile->country + ":";
+
+                //for lowercase letters
+                std::transform(flag.begin(), flag.end(), flag.begin(),
+                    [](unsigned char c) { return std::tolower(c); });
+
+                std::string avatar_url =
+                    "https://tetr.io/user-content/avatars/" + profile->id + ".jpg";
+
+                // --- Embed ---
+                dpp::embed embed;
+                embed
+                    .set_title("🎮 " + profile->username + "'s Profile")
+                    .set_url("https://ch.tetr.io/u/" + profile->username)
+                    .set_description(profile->bio.empty()
+                        ? "*No introduction provided.*"
+                        : profile->bio)
+                    .set_thumbnail(avatar_url)
+                    .set_color(get_rank_colour(profile->rank))
+
+                    .add_field(
+                        "🏆 RANK",
+                        "**" + rank_display + "**\n"
+                        "TR: " + fmt(profile->rating) + "\n"
+                        "🌍" + ((profile->world_rank == -1) ? " Unranked" : " #" + std::to_string(profile->world_rank)) + "\n"
+                        + (flag.empty() ? "" : flag) + ((profile->country_rank == -1) ? " Unranked" : +" #" + std::to_string(profile->country_rank)),
+                        true
+                    )
+
+                    .add_field(
+                        "📊 STATS",
+                        "APM: " + fmt(profile->apm) + "\n"
+                        "PPS: " + fmt(profile->pps) + "\n"
+                        "VS : " + fmt(profile->vs),
+                        true
+                    )
+
+                    .set_footer(dpp::embed_footer().set_text("Data from TETR.IO"))
+                    .set_timestamp(time(nullptr));
+
+                ctx.edit_response(dpp::message().add_embed(embed));
+            }
+            catch (const std::exception& e) {
+                ctx.edit_response(std::string("❌ Error: ") + e.what());
+            }
+            catch (...) {
+                ctx.edit_response("❌ Unknown error occurred.");
+            }
+        });
+
+        // ⚠️ IMPORTANT: keep future alive (prevents blocking fallback)
+        static std::vector<std::future<void>> futures;
+        futures.emplace_back(std::move(fut));
+    };
 }

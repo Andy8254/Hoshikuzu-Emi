@@ -3,17 +3,32 @@
 #include <iomanip>
 
 uint32_t get_rank_colour(const std::string& rank) {
-    if (rank == "X+") return 0xFF1A1A;
-    if (rank == "X")  return 0xFF4D4D;
-    if (rank == "U")  return 0xFF9900;
-    if (rank == "SS") return 0xFFD700;
-    if (rank == "S+" || rank == "S" || rank == "S-") return 0x00FFFF;
-    if (rank == "A+" || rank == "A" || rank == "A-") return 0x00FF00;
-    if (rank == "B+" || rank == "B" || rank == "B-") return 0x9966FF;
-    if (rank == "C+" || rank == "C" || rank == "C-") return 0xAAAAAA;
-    if (rank == "D+" || rank == "D" || rank == "D-") return 0x777777;
-    if (rank == "Z") return 0x444444; // Unranked
-    return 0x5865F2; // fallback
+    if (rank == "X+") return 0xff4fd8; // pink/magenta
+    if (rank == "X")  return 0x9c4dff; // purple
+    if (rank == "U")  return 0xff3d00; // red (VERY important fix)
+
+    if (rank == "SS") return 0xffd600; // gold
+    if (rank == "S+") return 0xffc400;
+    if (rank == "S")  return 0xfdd835;
+    if (rank == "S-") return 0xc6ff00;
+
+    if (rank == "A+") return 0x69f0ae; // green
+    if (rank == "A")  return 0x00e676;
+    if (rank == "A-") return 0x00c853;
+
+    if (rank == "B+") return 0x40c4ff; // blue-cyan
+    if (rank == "B")  return 0x00b0ff;
+    if (rank == "B-") return 0x0091ea;
+
+    if (rank == "C+") return 0x7c4dff; // violet
+    if (rank == "C")  return 0x651fff;
+    if (rank == "C-") return 0x6200ea;
+
+    if (rank == "D+") return 0xb0bec5; // gray
+    if (rank == "D")  return 0x90a4ae;
+    if (rank == "D-") return 0x78909c;
+
+    return 0x9e9e9e; // fallback
 }
 
 std::string format_double(double value, int precision) {

@@ -12,7 +12,8 @@ int main() {
     //Register logic handlers into the global 'handlers' map
     register_fundamental_commands(bot);
     register_general_commands(bot);
-    register_player_commands(bot);   // From Player.cpp 
+    register_player_commands(bot);   // From Player.cpp
+    register_tetrio_commands(bot);   // From Tetrio.cpp
 
     bot.on_ready([&bot](const dpp::ready_t& event) {
         if (dpp::run_once<struct register_commands>()) {
@@ -88,9 +89,14 @@ int main() {
             );
             bot.global_command_create(unlink_p);
             
-            dpp::slashcommand tetrio_cmd("tetrio", "Get TETR.IO player stats", app_id);
+            dpp::slashcommand tetrio_cmd("tetrio", "Show a TETR.IO profile", app_id);
             tetrio_cmd.add_option(
-                dpp::command_option(dpp::co_string, "username", "TETR.IO username", true)
+                dpp::command_option(
+                    dpp::co_string,
+                    "username",
+                    "TETR.IO username. Leave empty to use your linked account.",
+                    false
+                )
             );
             bot.global_command_create(tetrio_cmd);
 
