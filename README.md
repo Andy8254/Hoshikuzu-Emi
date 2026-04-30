@@ -31,3 +31,22 @@ Running this service on a standard desktop PC 24/7 can be significantly more exp
 **Please do note that all third-party libraries listed in LICENSE.md must be installed on the host server machine before initialisation for proper use.**
 
 
+---
+
+## 🔒 Data & Privacy
+Hoshikuzu Emi stores only the minimum data required to operate:
+
+- Discord IDs  
+- Linked external usernames (e.g., TETR.IO)  
+- Server configuration (roles, settings)
+
+No personal or sensitive data is collected.
+
+Data is stored locally on the bot host and is never sold or shared.
+
+---
+
+## ⚠️ Disclaimer
+This bot is provided "as is" without guarantees of uptime or accuracy.  
+Features may change during development.
+
