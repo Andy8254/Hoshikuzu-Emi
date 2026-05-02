@@ -10,8 +10,13 @@ DiscordLevel PermissionManager::get_discord_level(const dpp::slashcommand_t & ev
         return DiscordLevel::USER;
     }
 
-    // ✅ This works in all modern DPP versions
-    dpp::permission perms = event.command.get_resolved_permission(event.command.guild_id);
+    dpp::permission perms = 0;
+    const auto perm_it = event.command.resolved.member_permissions.find(event.command.usr.id);
+    if (perm_it == event.command.resolved.member_permissions.end()) {
+        return DiscordLevel::USER;
+    }
+
+    perms = perm_it->second;
 
     if (perms & dpp::p_administrator) {
         return DiscordLevel::ADMIN;

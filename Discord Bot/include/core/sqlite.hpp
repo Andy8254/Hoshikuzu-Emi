@@ -44,11 +44,18 @@ public:
 
 	// Staff Role
 	static bool set_staff_role(dpp::snowflake guild_id, dpp::snowflake role_id);
+	static bool clear_staff_role(dpp::snowflake guild_id);
 	static dpp::snowflake get_staff_role(dpp::snowflake guild_id);
 
 	// Admin Role
 	static bool set_admin_role(dpp::snowflake guild_id, dpp::snowflake role_id);
+	static bool clear_admin_role(dpp::snowflake guild_id);
 	static dpp::snowflake get_admin_role(dpp::snowflake guild_id);
+
+	// Tournament automation channel
+	static bool set_tournament_channel(dpp::snowflake guild_id, dpp::snowflake channel_id);
+	static bool clear_tournament_channel(dpp::snowflake guild_id);
+	static dpp::snowflake get_tournament_channel(dpp::snowflake guild_id);
 
 private:
 	static Database& get_db();

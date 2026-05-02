@@ -9,6 +9,10 @@ namespace tournament_manage {
 		std::string name;
 		std::string game_type;
 		std::string status;
+		bool registration_open = false;
+		bool checkin_open = false;
+		int checkin_closes_at = 0;
+		int checkin_grace_time = 600;
 	};
 
 	struct TournamentUpdate {
@@ -27,6 +31,9 @@ namespace tournament_manage {
 
 	bool update_tournament(int tournament_id, const TournamentUpdate& update);
 	bool delete_tournament(int tournament_id);
+	bool clear_all_tournament_data();
+	bool set_registration_open(int tournament_id, bool is_open);
+	bool set_checkin_open(int tournament_id, bool is_open, int closes_at, int grace_time);
 
 	std::optional<TournamentRecord> get_tournament(int tournament_id);
 	std::vector<TournamentRecord> list_tournaments();

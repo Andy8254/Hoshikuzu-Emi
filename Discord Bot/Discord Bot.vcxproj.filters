@@ -69,7 +69,13 @@
     <ClCompile Include="src\tournament\bracket\BracketGenerator.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\tournament\bracket\MatchStore.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="src\tournament\bracket\Ranking.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\tournament\discord\MatchThreads.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\tournament\manage.cpp">
@@ -81,7 +87,13 @@
     <ClCompile Include="src\tournament\registration.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\tournament\ruleset.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="src\tournament\seeding.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\tournament\utility\BracketSvg.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -128,7 +140,13 @@
     <ClInclude Include="include\tournament\bracket\Match.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="include\tournament\bracket\MatchStore.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="include\tournament\bracket\Player.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\tournament\discord\MatchThreads.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\tournament\bracket\Ranking.hpp">
@@ -143,6 +161,9 @@
     <ClInclude Include="include\tournament\registration.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="include\tournament\ruleset.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="include\tournament\seeding.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -150,6 +171,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\tournament\tournament\MatchRules.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\tournament\utility\BracketSvg.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
