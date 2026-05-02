@@ -27,18 +27,62 @@ DiscordLevel PermissionManager::get_discord_level(const dpp::slashcommand_t & ev
 }
 
 bool PermissionManager::is_mod(const dpp::slashcommand_t& event) {
-    return get_discord_level(event) >= DiscordLevel::MODERATOR;
+    return discord_rank(get_discord_level(event)) >= discord_rank(DiscordLevel::MODERATOR);
 }
 
 bool PermissionManager::is_admin(const dpp::slashcommand_t& event) {
-    return get_discord_level(event) >= DiscordLevel::ADMIN;
+    return discord_rank(get_discord_level(event)) >= discord_rank(DiscordLevel::ADMIN);
 }
 
 // --- Helpers ---
 
 bool PermissionManager::has_role(const dpp::slashcommand_t& event, dpp::snowflake role_id) {
+    if (!role_id) {
+        return false;
+    }
+
     const auto& roles = event.command.member.get_roles();
     return std::find(roles.begin(), roles.end(), role_id) != roles.end();
+}
+
+int PermissionManager::discord_rank(DiscordLevel level) {
+    switch (level) {
+    case DiscordLevel::USER:
+        return 0;
+    case DiscordLevel::MODERATOR:
+        return 1;
+    case DiscordLevel::ADMIN:
+        return 2;
+    case DiscordLevel::OWNER:
+        return 3;
+    }
+
+    return 0;
+}
+
+int PermissionManager::tournament_rank(TournamentRole role) {
+    switch (role) {
+    case TournamentRole::NONE:
+        return 0;
+    case TournamentRole::PLAYER:
+        return 1;
+    case TournamentRole::STAFF:
+        return 2;
+    case TournamentRole::ADMIN:
+        return 3;
+    }
+
+    return 0;
+}
+
+dpp::snowflake PermissionManager::get_tournament_staff_role_id(dpp::snowflake guild_id) {
+    GuildConfigManager::init();
+    return GuildConfigManager::get_staff_role(guild_id);
+}
+
+dpp::snowflake PermissionManager::get_tournament_admin_role_id(dpp::snowflake guild_id) {
+    GuildConfigManager::init();
+    return GuildConfigManager::get_admin_role(guild_id);
 }
 
 // --- Tournament role logic ---
@@ -51,8 +95,8 @@ TournamentRole PermissionManager::get_tournament_role(const dpp::slashcommand_t&
     }
 
     // Get configured roles from DB
-    dpp::snowflake staff_role = GuildConfigManager::get_staff_role(guild_id);
-    dpp::snowflake admin_role = GuildConfigManager::get_admin_role(guild_id);
+    dpp::snowflake staff_role = get_tournament_staff_role_id(guild_id);
+    dpp::snowflake admin_role = get_tournament_admin_role_id(guild_id);
 
     // Check roles (admin first = higher priority)
     if (admin_role && has_role(event, admin_role)) {
@@ -66,16 +110,37 @@ TournamentRole PermissionManager::get_tournament_role(const dpp::slashcommand_t&
     return TournamentRole::PLAYER;
 }
 
+bool PermissionManager::is_tournament_staff(const dpp::slashcommand_t& event) {
+    return tournament_rank(get_tournament_role(event)) >= tournament_rank(TournamentRole::STAFF);
+}
+
+bool PermissionManager::is_tournament_admin(const dpp::slashcommand_t& event) {
+    return tournament_rank(get_tournament_role(event)) >= tournament_rank(TournamentRole::ADMIN);
+}
+
 // --- Permission logic ---
+bool PermissionManager::can_configure_tournament_roles(const dpp::slashcommand_t& event) {
+    return is_admin(event);
+}
+
+bool PermissionManager::can_manage_tournament(const dpp::slashcommand_t& event) {
+    return is_mod(event) || is_tournament_staff(event);
+}
+
+bool PermissionManager::can_admin_tournament(const dpp::slashcommand_t& event) {
+    return is_admin(event) || is_tournament_admin(event);
+}
+
 bool PermissionManager::can_report_match(const dpp::slashcommand_t& event, bool is_override) {
     auto discord = get_discord_level(event);
     auto role = get_tournament_role(event);
 
     if (is_override) {
         // Mods OR tournament staff can override
-        return discord >= DiscordLevel::MODERATOR || role == TournamentRole::STAFF;
+        return discord_rank(discord) >= discord_rank(DiscordLevel::MODERATOR)
+            || tournament_rank(role) >= tournament_rank(TournamentRole::STAFF);
     }
 
     // Normal reporting: players + staff allowed
-    return role == TournamentRole::PLAYER || role == TournamentRole::STAFF;
+    return tournament_rank(role) >= tournament_rank(TournamentRole::PLAYER);
 }

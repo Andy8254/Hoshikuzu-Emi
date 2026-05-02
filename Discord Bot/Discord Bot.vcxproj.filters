@@ -36,6 +36,9 @@
     <ClCompile Include="src\commands\TETRIO.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\commands\Tournament.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="src\core\CommandRegistry.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -61,6 +64,24 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\tournament\TournamentService.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\tournament\bracket\BracketGenerator.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\tournament\bracket\Ranking.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\tournament\manage.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\tournament\matchmaking.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\tournament\registration.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\tournament\seeding.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -101,10 +122,28 @@
     <ClInclude Include="include\tournament\bracket\Bracket.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="include\tournament\bracket\BracketGenerator.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="include\tournament\bracket\Match.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\tournament\bracket\Player.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\tournament\bracket\Ranking.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\tournament\manage.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\tournament\matchmaking.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\tournament\registration.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\tournament\seeding.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\tournament\tournament\base.hpp">

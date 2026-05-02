@@ -7,7 +7,14 @@ enum class MatchState {
 	Completed
 };
 
+inline constexpr int DEST_NONE = -1;
+inline constexpr int DEST_CHAMPION = -2;
+inline constexpr int DEST_ELIMINATED = -3;
+
 struct Match {
+	int round = 0;
+	int position = 0;
+
 	std::string playerA_id;
 	std::string playerB_id;
 
@@ -16,8 +23,8 @@ struct Match {
 	int scoreA = 0;
 	int scoreB = 0;
 
-	int next_winner_match = -1;
-	int next_loser_match = -1;
+	int next_winner_match = DEST_NONE;
+	int next_loser_match = DEST_NONE;
 
 	MatchState state = MatchState::Pending;
 };
