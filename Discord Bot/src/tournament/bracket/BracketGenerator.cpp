@@ -1,4 +1,5 @@
 #include "tournament/bracket/Bracket.hpp"
+#include <algorithm>
 #include <stdexcept>
 
 namespace {
@@ -40,22 +41,47 @@ namespace {
 		return starts;
 	}
 
+	void place_player(std::vector<Match>& matches, int destination_match, int destination_slot, const std::string& player_id) {
+		if (player_id.empty() || destination_match < 0) {
+			return;
+		}
+
+		Match& next = matches.at(destination_match);
+		if (destination_slot == 0) {
+			next.playerA_id = player_id;
+		}
+		else if (destination_slot == 1) {
+			next.playerB_id = player_id;
+		}
+	}
+
+	void update_match_state(Match& match) {
+		if (!match.playerA_id.empty() && !match.playerB_id.empty() && match.state == MatchState::Pending) {
+			match.state = MatchState::Ongoing;
+		}
+	}
+
 	void place_winner(std::vector<Match>& matches, int source_index, const std::string& winner_id) {
 		if (winner_id.empty()) {
 			return;
 		}
 
-		Match& source = matches.at(source_index);
-		if (source.next_winner_match < 0) {
+		const Match& source = matches.at(source_index);
+		place_player(matches, source.next_winner_match, source.next_winner_slot, winner_id);
+		if (source.next_winner_match >= 0) {
+			update_match_state(matches.at(source.next_winner_match));
+		}
+	}
+
+	void place_loser(std::vector<Match>& matches, int source_index, const std::string& loser_id) {
+		if (loser_id.empty()) {
 			return;
 		}
 
-		Match& next = matches.at(source.next_winner_match);
-		if (source.position % 2 == 0) {
-			next.playerA_id = winner_id;
-		}
-		else {
-			next.playerB_id = winner_id;
+		const Match& source = matches.at(source_index);
+		place_player(matches, source.next_loser_match, source.next_loser_slot, loser_id);
+		if (source.next_loser_match >= 0) {
+			update_match_state(matches.at(source.next_loser_match));
 		}
 	}
 }
@@ -96,6 +122,7 @@ void Bracket::generate_single_elimination(const std::vector<std::string>& seeded
 
 			if (round + 1 < rounds) {
 				match.next_winner_match = round_starts[round + 1] + (position / 2);
+				match.next_winner_slot = position % 2;
 			}
 			else {
 				match.next_winner_match = DEST_CHAMPION;
@@ -175,6 +202,7 @@ void Bracket::generate_double_elimination(const std::vector<std::string>& seeded
 			const int index = wb_starts[round] + pos;
 			Match& match = matches[index];
 
+			match.bracket = "winners";
 			match.round = round;
 			match.position = pos;
 
@@ -188,8 +216,14 @@ void Bracket::generate_double_elimination(const std::vector<std::string>& seeded
 			}
 
 			if (round == 0) {
-				match.next_loser_match = lb_starts[0] + (pos / 2);
-				match.next_loser_slot = pos % 2;
+				if (lb_rounds > 0) {
+					match.next_loser_match = lb_starts[0] + (pos / 2);
+					match.next_loser_slot = pos % 2;
+				}
+				else {
+					match.next_loser_match = grand_final;
+					match.next_loser_slot = 1;
+				}
 			}
 			else {
 				const int lb_round = 2 * round - 1;
@@ -207,6 +241,7 @@ void Bracket::generate_double_elimination(const std::vector<std::string>& seeded
 			const int index = lb_starts[lb_round] + pos;
 			Match& match = matches[index];
 
+			match.bracket = "losers";
 			match.round = wb_rounds + lb_round;
 			match.position = pos;
 			match.next_loser_match = DEST_ELIMINATED;
@@ -231,14 +266,16 @@ void Bracket::generate_double_elimination(const std::vector<std::string>& seeded
 	}
 
 	// Grand final
+	matches[grand_final].bracket = "grand_finals";
 	matches[grand_final].round = wb_rounds + lb_rounds;
 	matches[grand_final].position = 0;
 	matches[grand_final].next_winner_match = DEST_CHAMPION;
 	matches[grand_final].next_loser_match = DEST_ELIMINATED;
 
 	// Optional reset final placeholder
+	matches[grand_final_reset].bracket = "grand_finals";
 	matches[grand_final_reset].round = wb_rounds + lb_rounds + 1;
-	matches[grand_final_reset].position = 0;
+	matches[grand_final_reset].position = 1;
 	matches[grand_final_reset].next_winner_match = DEST_CHAMPION;
 	matches[grand_final_reset].next_loser_match = DEST_ELIMINATED;
 
@@ -286,9 +323,26 @@ void Bracket::report_match(int match_index, int scoreA, int scoreB) {
 	match.scoreA = scoreA;
 	match.scoreB = scoreB;
 	match.winner_id = scoreA > scoreB ? match.playerA_id : match.playerB_id;
+	const std::string loser_id = scoreA > scoreB ? match.playerB_id : match.playerA_id;
 	match.state = MatchState::Completed;
 
+	const bool loser_side_won_grand_final =
+		match.bracket == "grand_finals"
+		&& match.position == 0
+		&& scoreB > scoreA
+		&& match.next_winner_match == DEST_CHAMPION
+		&& match_index + 1 < static_cast<int>(matches.size())
+		&& matches[match_index + 1].bracket == "grand_finals";
+
+	if (loser_side_won_grand_final) {
+		place_player(matches, match_index + 1, 0, match.playerA_id);
+		place_player(matches, match_index + 1, 1, match.playerB_id);
+		update_match_state(matches.at(match_index + 1));
+		return;
+	}
+
 	place_winner(matches, match_index, match.winner_id);
+	place_loser(matches, match_index, loser_id);
 }
 
 Match& Bracket::get_match(int index) {

@@ -57,6 +57,65 @@ public:
 	static bool clear_tournament_channel(dpp::snowflake guild_id);
 	static dpp::snowflake get_tournament_channel(dpp::snowflake guild_id);
 
+	// Tournament log channel
+	static bool set_tournament_log_channel(dpp::snowflake guild_id, dpp::snowflake channel_id);
+	static bool clear_tournament_log_channel(dpp::snowflake guild_id);
+	static dpp::snowflake get_tournament_log_channel(dpp::snowflake guild_id);
+
+private:
+	static Database& get_db();
+};
+
+class ServerSettingsManager {
+public:
+	static constexpr dpp::snowflake DEVELOPER_ID = 543676141177798676;
+	static bool init();
+
+	static bool set_owner_if_empty(dpp::snowflake guild_id, dpp::snowflake owner_id);
+	static dpp::snowflake get_owner(dpp::snowflake guild_id);
+
+	static bool set_admin_role(dpp::snowflake guild_id, dpp::snowflake role_id);
+	static dpp::snowflake get_admin_role(dpp::snowflake guild_id);
+
+	static bool set_moderator_role(dpp::snowflake guild_id, dpp::snowflake role_id);
+	static dpp::snowflake get_moderator_role(dpp::snowflake guild_id);
+
+	static bool set_staff_role(dpp::snowflake guild_id, dpp::snowflake role_id);
+	static dpp::snowflake get_staff_role(dpp::snowflake guild_id);
+
+	static bool set_language(dpp::snowflake guild_id, const std::string& language);
+	static std::string get_language(dpp::snowflake guild_id);
+
+	static bool set_modlog_channel(dpp::snowflake guild_id, dpp::snowflake channel_id);
+	static bool clear_modlog_channel(dpp::snowflake guild_id);
+	static dpp::snowflake get_modlog_channel(dpp::snowflake guild_id);
+	static Database& get_db();
+};
+
+struct ModerationCase {
+	int id = 0;
+	dpp::snowflake guild_id = 0;
+	dpp::snowflake target_id = 0;
+	dpp::snowflake actor_id = 0;
+	std::string action;
+	std::string reason;
+	int duration_seconds = 0;
+	int created_at = 0;
+};
+
+class ModerationManager {
+public:
+	static bool init();
+	static std::optional<int> create_case(
+		dpp::snowflake guild_id,
+		dpp::snowflake target_id,
+		dpp::snowflake actor_id,
+		const std::string& action,
+		const std::string& reason,
+		int duration_seconds = 0
+	);
+	static std::vector<ModerationCase> list_cases(dpp::snowflake guild_id, dpp::snowflake target_id, int limit = 10);
+
 private:
 	static Database& get_db();
 };

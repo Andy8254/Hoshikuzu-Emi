@@ -1,6 +1,7 @@
 #include "tournament/bracket/MatchStore.hpp"
 #include "tournament/bracket/Bracket.hpp"
 #include "tournament/registration.hpp"
+#include "tournament/matchmaking.hpp"
 #include <filesystem>
 #include <iostream>
 #include <sstream>
@@ -56,6 +57,13 @@ namespace {
 		return instance;
 	}
 
+	const char* MATCH_SELECT_COLUMNS =
+		"id, tournament_id, bracket_match_index, round, position, bracket, "
+		"player_a_id, player_b_id, winner_id, score_a, score_b, state, streamed, thread_id, message_id, "
+		"player_a_checked_in, player_b_checked_in, match_opened_at, grace_time, no_show_resolved, "
+		"no_show_reason, pending_auto_dq_player_id, "
+		"next_winner_match, next_winner_slot, next_loser_match, next_loser_slot";
+
 	bool bind_text(sqlite3_stmt* stmt, int index, const std::string& value) {
 		return sqlite3_bind_text(stmt, index, value.c_str(), -1, SQLITE_TRANSIENT) == SQLITE_OK;
 	}
@@ -82,6 +90,17 @@ namespace {
 		match.streamed = sqlite3_column_int(stmt, 12) != 0;
 		match.thread_id = static_cast<dpp::snowflake>(sqlite3_column_int64(stmt, 13));
 		match.message_id = static_cast<dpp::snowflake>(sqlite3_column_int64(stmt, 14));
+		match.player_a_checked_in = sqlite3_column_int(stmt, 15) != 0;
+		match.player_b_checked_in = sqlite3_column_int(stmt, 16) != 0;
+		match.match_opened_at = sqlite3_column_int(stmt, 17);
+		match.grace_time = sqlite3_column_int(stmt, 18);
+		match.no_show_resolved = sqlite3_column_int(stmt, 19) != 0;
+		match.no_show_reason = column_text(stmt, 20);
+		match.pending_auto_dq_player_id = column_text(stmt, 21);
+		match.next_winner_match = sqlite3_column_int(stmt, 22);
+		match.next_winner_slot = sqlite3_column_int(stmt, 23);
+		match.next_loser_match = sqlite3_column_int(stmt, 24);
+		match.next_loser_slot = sqlite3_column_int(stmt, 25);
 		return match;
 	}
 
@@ -89,8 +108,9 @@ namespace {
 		sqlite3_stmt* stmt = nullptr;
 		const char* sql =
 			"INSERT INTO tournament_matches "
-			"(tournament_id, bracket_match_index, round, position, bracket, player_a_id, player_b_id, winner_id, score_a, score_b, state) "
-			"VALUES (?, ?, ?, ?, 'winners', ?, ?, ?, ?, ?, ?);";
+			"(tournament_id, bracket_match_index, round, position, bracket, player_a_id, player_b_id, winner_id, "
+			"score_a, score_b, state, next_winner_match, next_winner_slot, next_loser_match, next_loser_slot) "
+			"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);";
 
 		if (sqlite3_prepare_v2(get_db().handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
 			return false;
@@ -109,12 +129,17 @@ namespace {
 			&& sqlite3_bind_int(stmt, 2, bracket_index) == SQLITE_OK
 			&& sqlite3_bind_int(stmt, 3, source.round) == SQLITE_OK
 			&& sqlite3_bind_int(stmt, 4, source.position) == SQLITE_OK
-			&& bind_text(stmt, 5, source.playerA_id)
-			&& bind_text(stmt, 6, source.playerB_id)
-			&& bind_text(stmt, 7, source.winner_id)
-			&& sqlite3_bind_int(stmt, 8, source.scoreA) == SQLITE_OK
-			&& sqlite3_bind_int(stmt, 9, source.scoreB) == SQLITE_OK
-			&& bind_text(stmt, 10, tournament_bracket::state_to_string(state));
+			&& bind_text(stmt, 5, source.bracket)
+			&& bind_text(stmt, 6, source.playerA_id)
+			&& bind_text(stmt, 7, source.playerB_id)
+			&& bind_text(stmt, 8, source.winner_id)
+			&& sqlite3_bind_int(stmt, 9, source.scoreA) == SQLITE_OK
+			&& sqlite3_bind_int(stmt, 10, source.scoreB) == SQLITE_OK
+			&& bind_text(stmt, 11, tournament_bracket::state_to_string(state))
+			&& sqlite3_bind_int(stmt, 12, source.next_winner_match) == SQLITE_OK
+			&& sqlite3_bind_int(stmt, 13, source.next_winner_slot) == SQLITE_OK
+			&& sqlite3_bind_int(stmt, 14, source.next_loser_match) == SQLITE_OK
+			&& sqlite3_bind_int(stmt, 15, source.next_loser_slot) == SQLITE_OK;
 
 		const bool success = bound && sqlite3_step(stmt) == SQLITE_DONE;
 		sqlite3_finalize(stmt);
@@ -142,6 +167,205 @@ namespace {
 		sqlite3_finalize(stmt);
 		return result;
 	}
+
+	bool ensure_ready_if_filled(int tournament_id, int bracket_match_index) {
+		sqlite3_stmt* stmt = nullptr;
+		const char* sql =
+			"UPDATE tournament_matches "
+			"SET state = 'ready' "
+			"WHERE tournament_id = ? AND bracket_match_index = ? "
+			"AND state = 'pending' "
+			"AND player_a_id <> '' "
+			"AND player_b_id <> '';";
+
+		if (sqlite3_prepare_v2(get_db().handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+			return false;
+		}
+
+		sqlite3_bind_int(stmt, 1, tournament_id);
+		sqlite3_bind_int(stmt, 2, bracket_match_index);
+		const bool success = sqlite3_step(stmt) == SQLITE_DONE;
+		sqlite3_finalize(stmt);
+		return success;
+	}
+
+	bool place_player(int tournament_id, int bracket_match_index, int slot, const std::string& player_id) {
+		if (bracket_match_index < 0 || player_id.empty() || (slot != 0 && slot != 1)) {
+			return true;
+		}
+
+		const char* column = slot == 0 ? "player_a_id" : "player_b_id";
+		std::string sql = std::string("UPDATE tournament_matches SET ") + column + " = ? "
+			"WHERE tournament_id = ? AND bracket_match_index = ?;";
+
+		sqlite3_stmt* stmt = nullptr;
+		if (sqlite3_prepare_v2(get_db().handle(), sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+			return false;
+		}
+
+		bind_text(stmt, 1, player_id);
+		sqlite3_bind_int(stmt, 2, tournament_id);
+		sqlite3_bind_int(stmt, 3, bracket_match_index);
+		const bool success = sqlite3_step(stmt) == SQLITE_DONE && sqlite3_changes(get_db().handle()) > 0;
+		sqlite3_finalize(stmt);
+
+		return success && ensure_ready_if_filled(tournament_id, bracket_match_index);
+	}
+
+	std::optional<tournament_bracket::StoredMatch> get_match_by_bracket_index(int tournament_id, int bracket_match_index) {
+		if (bracket_match_index < 0 || !tournament_bracket::init()) return std::nullopt;
+
+		sqlite3_stmt* stmt = nullptr;
+		const std::string sql = std::string("SELECT ") + MATCH_SELECT_COLUMNS +
+			" FROM tournament_matches WHERE tournament_id = ? AND bracket_match_index = ? LIMIT 1;";
+
+		if (sqlite3_prepare_v2(get_db().handle(), sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+			return std::nullopt;
+		}
+
+		sqlite3_bind_int(stmt, 1, tournament_id);
+		sqlite3_bind_int(stmt, 2, bracket_match_index);
+
+		std::optional<tournament_bracket::StoredMatch> result;
+		if (sqlite3_step(stmt) == SQLITE_ROW) {
+			result = read_match(stmt);
+		}
+
+		sqlite3_finalize(stmt);
+		return result;
+	}
+
+	bool destination_completed(int tournament_id, int bracket_match_index) {
+		const auto match = get_match_by_bracket_index(tournament_id, bracket_match_index);
+		return match && match->state == tournament_bracket::StoredMatchState::Completed;
+	}
+
+	bool clear_destination_slot(int tournament_id, int bracket_match_index, int slot) {
+		if (bracket_match_index < 0 || (slot != 0 && slot != 1)) {
+			return true;
+		}
+
+		const char* column = slot == 0 ? "player_a_id" : "player_b_id";
+		std::string sql = std::string("UPDATE tournament_matches SET ") + column + " = '', state = 'pending' "
+			"WHERE tournament_id = ? AND bracket_match_index = ? AND state <> 'completed';";
+
+		sqlite3_stmt* stmt = nullptr;
+		if (sqlite3_prepare_v2(get_db().handle(), sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+			return false;
+		}
+
+		sqlite3_bind_int(stmt, 1, tournament_id);
+		sqlite3_bind_int(stmt, 2, bracket_match_index);
+		const bool success = sqlite3_step(stmt) == SQLITE_DONE;
+		sqlite3_finalize(stmt);
+		return success;
+	}
+
+	int participant_seed(int tournament_id, const std::string& discord_id) {
+		const auto participant = tournament_registration::get_participant(tournament_id, discord_id);
+		if (!participant || participant->seed <= 0) {
+			return 1000000;
+		}
+
+		return participant->seed;
+	}
+
+	bool mark_pending_auto_dq(int tournament_id, int bracket_match_index, const std::string& discord_id) {
+		if (bracket_match_index < 0 || discord_id.empty()) {
+			return true;
+		}
+
+		sqlite3_stmt* stmt = nullptr;
+		const char* sql =
+			"UPDATE tournament_matches "
+			"SET pending_auto_dq_player_id = ? "
+			"WHERE tournament_id = ? AND bracket_match_index = ? AND state <> 'completed';";
+
+		if (sqlite3_prepare_v2(get_db().handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+			return false;
+		}
+
+		bind_text(stmt, 1, discord_id);
+		sqlite3_bind_int(stmt, 2, tournament_id);
+		sqlite3_bind_int(stmt, 3, bracket_match_index);
+		const bool success = sqlite3_step(stmt) == SQLITE_DONE;
+		sqlite3_finalize(stmt);
+		return success;
+	}
+
+	bool mark_no_show_metadata(int tournament_id, int match_id, const std::string& reason) {
+		sqlite3_stmt* stmt = nullptr;
+		const char* sql =
+			"UPDATE tournament_matches "
+			"SET no_show_resolved = 1, no_show_reason = ?, pending_auto_dq_player_id = '' "
+			"WHERE tournament_id = ? AND id = ?;";
+
+		if (sqlite3_prepare_v2(get_db().handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+			return false;
+		}
+
+		bind_text(stmt, 1, reason);
+		sqlite3_bind_int(stmt, 2, tournament_id);
+		sqlite3_bind_int(stmt, 3, match_id);
+		const bool success = sqlite3_step(stmt) == SQLITE_DONE;
+		sqlite3_finalize(stmt);
+		return success;
+	}
+
+	bool forfeit_match_player(
+		const tournament_bracket::StoredMatch& match,
+		const std::string& discord_id,
+		const std::string& reason,
+		tournament_registration::ParticipantStatus status
+	) {
+		if (match.state == tournament_bracket::StoredMatchState::Completed
+			|| match.player_a_id.empty()
+			|| match.player_b_id.empty()
+			|| discord_id.empty()
+			|| (discord_id != match.player_a_id && discord_id != match.player_b_id)) {
+			return false;
+		}
+
+		const int score_a = discord_id == match.player_a_id ? 0 : 1;
+		const int score_b = discord_id == match.player_b_id ? 0 : 1;
+		if (!tournament_bracket::report_match(match.tournament_id, match.id, score_a, score_b)) {
+			return false;
+		}
+
+		tournament_registration::set_participant_status(match.tournament_id, discord_id, status);
+		return mark_no_show_metadata(match.tournament_id, match.id, reason);
+	}
+
+	bool seed_bracket_matches(int tournament_id, bool double_elimination) {
+		if (tournament_id <= 0 || !tournament_bracket::init()) return false;
+		const auto participants = tournament_registration::list_checked_in_participants(tournament_id);
+		if (participants.size() < 2) return false;
+
+		std::vector<std::string> seeded_players;
+		for (const auto& participant : participants) {
+			seeded_players.push_back(participant.discord_id);
+		}
+
+		Bracket bracket;
+		if (double_elimination) {
+			bracket.generate_double_elimination(seeded_players);
+		}
+		else {
+			bracket.generate_single_elimination(seeded_players);
+		}
+
+		if (bracket.matches.empty()) return false;
+		if (!tournament_bracket::clear_matches(tournament_id)) return false;
+
+		get_db().execute("BEGIN TRANSACTION;");
+		for (int i = 0; i < static_cast<int>(bracket.matches.size()); ++i) {
+			if (!insert_match(tournament_id, i, bracket.matches[i])) {
+				get_db().execute("ROLLBACK;");
+				return false;
+			}
+		}
+		return get_db().execute("COMMIT;");
+	}
 }
 
 bool tournament_bracket::init() {
@@ -164,11 +388,50 @@ bool tournament_bracket::init() {
 		"message_id INTEGER DEFAULT 0,"
 		"player_a_checked_in INTEGER DEFAULT 0,"
 		"player_b_checked_in INTEGER DEFAULT 0,"
+		"match_opened_at INTEGER DEFAULT 0,"
+		"grace_time INTEGER DEFAULT 600,"
+		"no_show_resolved INTEGER DEFAULT 0,"
+		"no_show_reason TEXT DEFAULT '',"
+		"pending_auto_dq_player_id TEXT DEFAULT '',"
+		"next_winner_match INTEGER DEFAULT -1,"
+		"next_winner_slot INTEGER DEFAULT -1,"
+		"next_loser_match INTEGER DEFAULT -1,"
+		"next_loser_slot INTEGER DEFAULT -1,"
 		"UNIQUE(tournament_id, bracket_match_index),"
 		"FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE"
 		");";
 
-	return get_db().execute(sql);
+	if (!get_db().execute(sql)) {
+		return false;
+	}
+
+	const char* migrations[] = {
+		"ALTER TABLE tournament_matches ADD COLUMN player_a_checked_in INTEGER DEFAULT 0;",
+		"ALTER TABLE tournament_matches ADD COLUMN player_b_checked_in INTEGER DEFAULT 0;",
+		"ALTER TABLE tournament_matches ADD COLUMN match_opened_at INTEGER DEFAULT 0;",
+		"ALTER TABLE tournament_matches ADD COLUMN grace_time INTEGER DEFAULT 600;",
+		"ALTER TABLE tournament_matches ADD COLUMN no_show_resolved INTEGER DEFAULT 0;",
+		"ALTER TABLE tournament_matches ADD COLUMN no_show_reason TEXT DEFAULT '';",
+		"ALTER TABLE tournament_matches ADD COLUMN pending_auto_dq_player_id TEXT DEFAULT '';",
+		"ALTER TABLE tournament_matches ADD COLUMN next_winner_match INTEGER DEFAULT -1;",
+		"ALTER TABLE tournament_matches ADD COLUMN next_winner_slot INTEGER DEFAULT -1;",
+		"ALTER TABLE tournament_matches ADD COLUMN next_loser_match INTEGER DEFAULT -1;",
+		"ALTER TABLE tournament_matches ADD COLUMN next_loser_slot INTEGER DEFAULT -1;"
+	};
+
+	for (const char* migration : migrations) {
+		char* error = nullptr;
+		const int rc = sqlite3_exec(get_db().handle(), migration, nullptr, nullptr, &error);
+		if (rc != SQLITE_OK) {
+			const std::string message = error ? error : "";
+			sqlite3_free(error);
+			if (message.find("duplicate column name") == std::string::npos) {
+				return false;
+			}
+		}
+	}
+
+	return true;
 }
 
 bool tournament_bracket::clear_matches(int tournament_id) {
@@ -183,38 +446,19 @@ bool tournament_bracket::clear_matches(int tournament_id) {
 }
 
 bool tournament_bracket::generate_single_elimination(int tournament_id) {
-	if (tournament_id <= 0 || !init()) return false;
-	const auto participants = tournament_registration::list_checked_in_participants(tournament_id);
-	if (participants.size() < 2) return false;
+	return seed_bracket_matches(tournament_id, false);
+}
 
-	std::vector<std::string> seeded_players;
-	for (const auto& participant : participants) {
-		seeded_players.push_back(participant.discord_id);
-	}
-
-	Bracket bracket;
-	bracket.generate_single_elimination(seeded_players);
-	if (bracket.matches.empty()) return false;
-
-	if (!clear_matches(tournament_id)) return false;
-
-	get_db().execute("BEGIN TRANSACTION;");
-	for (int i = 0; i < static_cast<int>(bracket.matches.size()); ++i) {
-		if (!insert_match(tournament_id, i, bracket.matches[i])) {
-			get_db().execute("ROLLBACK;");
-			return false;
-		}
-	}
-	return get_db().execute("COMMIT;");
+bool tournament_bracket::generate_double_elimination(int tournament_id) {
+	return seed_bracket_matches(tournament_id, true);
 }
 
 std::optional<tournament_bracket::StoredMatch> tournament_bracket::get_match(int tournament_id, int match_id) {
 	if (tournament_id <= 0 || match_id <= 0 || !init()) return std::nullopt;
 	sqlite3_stmt* stmt = nullptr;
-	const char* sql =
-		"SELECT id, tournament_id, bracket_match_index, round, position, bracket, player_a_id, player_b_id, winner_id, score_a, score_b, state, streamed, thread_id, message_id "
-		"FROM tournament_matches WHERE tournament_id = ? AND id = ? LIMIT 1;";
-	if (sqlite3_prepare_v2(get_db().handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) return std::nullopt;
+	const std::string sql = std::string("SELECT ") + MATCH_SELECT_COLUMNS +
+		" FROM tournament_matches WHERE tournament_id = ? AND id = ? LIMIT 1;";
+	if (sqlite3_prepare_v2(get_db().handle(), sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) return std::nullopt;
 	sqlite3_bind_int(stmt, 1, tournament_id);
 	sqlite3_bind_int(stmt, 2, match_id);
 
@@ -225,36 +469,27 @@ std::optional<tournament_bracket::StoredMatch> tournament_bracket::get_match(int
 }
 
 std::vector<tournament_bracket::StoredMatch> tournament_bracket::list_matches(int tournament_id) {
-	return query_matches(
-		"SELECT id, tournament_id, bracket_match_index, round, position, bracket, player_a_id, player_b_id, winner_id, score_a, score_b, state, streamed, thread_id, message_id "
-		"FROM tournament_matches WHERE tournament_id = ? ORDER BY round ASC, position ASC;",
-		tournament_id
-	);
+	const std::string sql = std::string("SELECT ") + MATCH_SELECT_COLUMNS +
+		" FROM tournament_matches WHERE tournament_id = ? ORDER BY round ASC, bracket ASC, position ASC;";
+	return query_matches(sql.c_str(), tournament_id);
 }
 
 std::vector<tournament_bracket::StoredMatch> tournament_bracket::list_current_matches(int tournament_id) {
-	return query_matches(
-		"SELECT id, tournament_id, bracket_match_index, round, position, bracket, player_a_id, player_b_id, winner_id, score_a, score_b, state, streamed, thread_id, message_id "
-		"FROM tournament_matches WHERE tournament_id = ? AND state IN ('ready', 'ongoing') ORDER BY round ASC, position ASC;",
-		tournament_id
-	);
+	const std::string sql = std::string("SELECT ") + MATCH_SELECT_COLUMNS +
+		" FROM tournament_matches WHERE tournament_id = ? AND state IN ('ready', 'ongoing') ORDER BY round ASC, bracket ASC, position ASC;";
+	return query_matches(sql.c_str(), tournament_id);
 }
 
 std::vector<tournament_bracket::StoredMatch> tournament_bracket::list_round_matches(int tournament_id, int round) {
-	return query_matches(
-		"SELECT id, tournament_id, bracket_match_index, round, position, bracket, player_a_id, player_b_id, winner_id, score_a, score_b, state, streamed, thread_id, message_id "
-		"FROM tournament_matches WHERE tournament_id = ? AND round = ? ORDER BY position ASC;",
-		tournament_id,
-		round
-	);
+	const std::string sql = std::string("SELECT ") + MATCH_SELECT_COLUMNS +
+		" FROM tournament_matches WHERE tournament_id = ? AND round = ? ORDER BY bracket ASC, position ASC;";
+	return query_matches(sql.c_str(), tournament_id, round);
 }
 
 std::vector<tournament_bracket::StoredMatch> tournament_bracket::list_streamed_matches(int tournament_id) {
-	return query_matches(
-		"SELECT id, tournament_id, bracket_match_index, round, position, bracket, player_a_id, player_b_id, winner_id, score_a, score_b, state, streamed, thread_id, message_id "
-		"FROM tournament_matches WHERE tournament_id = ? AND streamed = 1 ORDER BY round ASC, position ASC;",
-		tournament_id
-	);
+	const std::string sql = std::string("SELECT ") + MATCH_SELECT_COLUMNS +
+		" FROM tournament_matches WHERE tournament_id = ? AND streamed = 1 ORDER BY round ASC, bracket ASC, position ASC;";
+	return query_matches(sql.c_str(), tournament_id);
 }
 
 bool tournament_bracket::assign_streamed(int tournament_id, int match_id, bool streamed) {
@@ -284,6 +519,27 @@ bool tournament_bracket::set_discord_thread(int tournament_id, int match_id, dpp
 	return success;
 }
 
+bool tournament_bracket::mark_match_opened(int tournament_id, int match_id, int opened_at, int grace_time) {
+	if (tournament_id <= 0 || match_id <= 0 || opened_at <= 0 || !init()) return false;
+	if (grace_time <= 0) {
+		grace_time = tournament_matchmaking::DEFAULT_MATCH_GRACE_TIME;
+	}
+
+	sqlite3_stmt* stmt = nullptr;
+	const char* sql =
+		"UPDATE tournament_matches "
+		"SET match_opened_at = ?, grace_time = ? "
+		"WHERE tournament_id = ? AND id = ? AND match_opened_at = 0;";
+	if (sqlite3_prepare_v2(get_db().handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) return false;
+	sqlite3_bind_int(stmt, 1, opened_at);
+	sqlite3_bind_int(stmt, 2, grace_time);
+	sqlite3_bind_int(stmt, 3, tournament_id);
+	sqlite3_bind_int(stmt, 4, match_id);
+	const bool success = sqlite3_step(stmt) == SQLITE_DONE;
+	sqlite3_finalize(stmt);
+	return success;
+}
+
 bool tournament_bracket::mark_checked_in(int tournament_id, int match_id, const std::string& discord_id) {
 	auto match = get_match(tournament_id, match_id);
 	if (!match || discord_id.empty()) return false;
@@ -303,9 +559,113 @@ bool tournament_bracket::mark_checked_in(int tournament_id, int match_id, const 
 	return success;
 }
 
+bool tournament_bracket::forfeit_player(
+	int tournament_id,
+	int match_id,
+	const std::string& discord_id,
+	const std::string& reason
+) {
+	auto match = get_match(tournament_id, match_id);
+	if (!match) return false;
+	return forfeit_match_player(
+		*match,
+		discord_id,
+		reason.empty() ? "forfeit" : reason,
+		tournament_registration::ParticipantStatus::Dropped
+	);
+}
+
+int tournament_bracket::resolve_due_no_shows(int tournament_id, int now) {
+	if (tournament_id <= 0 || now <= 0 || !init()) {
+		return 0;
+	}
+
+	int resolved = 0;
+	for (const auto& match : list_current_matches(tournament_id)) {
+		if (!match.pending_auto_dq_player_id.empty()
+			&& (match.pending_auto_dq_player_id == match.player_a_id
+				|| match.pending_auto_dq_player_id == match.player_b_id)
+			&& forfeit_match_player(
+				match,
+				match.pending_auto_dq_player_id,
+				"auto_dq_after_both_absent",
+				tournament_registration::ParticipantStatus::NoShow
+			)) {
+			++resolved;
+		}
+	}
+
+	for (const auto& match : list_current_matches(tournament_id)) {
+		if (match.state == StoredMatchState::Completed
+			|| match.no_show_resolved
+			|| match.match_opened_at <= 0
+			|| now <= match.match_opened_at + match.grace_time
+			|| match.player_a_id.empty()
+			|| match.player_b_id.empty()) {
+			continue;
+		}
+
+		if (match.player_a_checked_in && !match.player_b_checked_in) {
+			if (forfeit_match_player(
+				match,
+				match.player_b_id,
+				"match_no_show",
+				tournament_registration::ParticipantStatus::NoShow
+			)) {
+				++resolved;
+			}
+			continue;
+		}
+
+		if (match.player_b_checked_in && !match.player_a_checked_in) {
+			if (forfeit_match_player(
+				match,
+				match.player_a_id,
+				"match_no_show",
+				tournament_registration::ParticipantStatus::NoShow
+			)) {
+				++resolved;
+			}
+			continue;
+		}
+
+		if (!match.player_a_checked_in && !match.player_b_checked_in) {
+			const int seed_a = participant_seed(tournament_id, match.player_a_id);
+			const int seed_b = participant_seed(tournament_id, match.player_b_id);
+			const std::string upper_seed_player = seed_a <= seed_b ? match.player_a_id : match.player_b_id;
+			const std::string lower_seed_player = upper_seed_player == match.player_a_id ? match.player_b_id : match.player_a_id;
+
+			if (mark_pending_auto_dq(tournament_id, match.next_winner_match, upper_seed_player)
+				&& forfeit_match_player(
+					match,
+					lower_seed_player,
+					"both_absent_lower_seed_eliminated",
+					tournament_registration::ParticipantStatus::NoShow
+				)) {
+				tournament_registration::set_participant_status(
+					tournament_id,
+					upper_seed_player,
+					tournament_registration::ParticipantStatus::NoShow
+				);
+				++resolved;
+			}
+		}
+	}
+
+	return resolved;
+}
+
 bool tournament_bracket::report_match(int tournament_id, int match_id, int score_a, int score_b) {
 	auto match = get_match(tournament_id, match_id);
-	if (!match || match->player_a_id.empty() || match->player_b_id.empty() || score_a == score_b) return false;
+	if (!match
+		|| match->player_a_id.empty()
+		|| match->player_b_id.empty()
+		|| match->state == StoredMatchState::Completed
+		|| score_a < 0
+		|| score_b < 0
+		|| score_a == score_b) {
+		return false;
+	}
 
 	const std::string winner = score_a > score_b ? match->player_a_id : match->player_b_id;
 	get_db().execute("BEGIN TRANSACTION;");
@@ -331,37 +691,89 @@ bool tournament_bracket::report_match(int tournament_id, int match_id, int score
 		return false;
 	}
 
-	const int next_round = match->round + 1;
-	const int next_position = match->position / 2;
-	stmt = nullptr;
-	const char* next_sql =
-		"UPDATE tournament_matches "
-		"SET player_a_id = CASE WHEN ? = 0 THEN ? ELSE player_a_id END, "
-		"player_b_id = CASE WHEN ? = 1 THEN ? ELSE player_b_id END, "
-		"state = CASE "
-		"WHEN (CASE WHEN ? = 0 THEN ? ELSE player_a_id END) <> '' "
-		"AND (CASE WHEN ? = 1 THEN ? ELSE player_b_id END) <> '' "
-		"AND state = 'pending' THEN 'ready' ELSE state END "
-		"WHERE tournament_id = ? AND round = ? AND position = ?;";
+	const bool loser_side_won_grand_final =
+		match->bracket == "grand_finals"
+		&& match->position == 0
+		&& score_b > score_a
+		&& match->next_winner_match < 0;
 
-	if (sqlite3_prepare_v2(get_db().handle(), next_sql, -1, &stmt, nullptr) == SQLITE_OK) {
-		const int side = match->position % 2;
-		sqlite3_bind_int(stmt, 1, side);
-		bind_text(stmt, 2, winner);
-		sqlite3_bind_int(stmt, 3, side);
-		bind_text(stmt, 4, winner);
-		sqlite3_bind_int(stmt, 5, side);
-		bind_text(stmt, 6, winner);
-		sqlite3_bind_int(stmt, 7, side);
-		bind_text(stmt, 8, winner);
-		sqlite3_bind_int(stmt, 9, tournament_id);
-		sqlite3_bind_int(stmt, 10, next_round);
-		sqlite3_bind_int(stmt, 11, next_position);
-		sqlite3_step(stmt);
-		sqlite3_finalize(stmt);
+	if (loser_side_won_grand_final) {
+		if (!place_player(tournament_id, match->bracket_match_index + 1, 0, match->player_a_id)
+			|| !place_player(tournament_id, match->bracket_match_index + 1, 1, match->player_b_id)) {
+			get_db().execute("ROLLBACK;");
+			return false;
+		}
+	}
+	else {
+		const std::string loser = score_a > score_b ? match->player_b_id : match->player_a_id;
+		if (!place_player(tournament_id, match->next_winner_match, match->next_winner_slot, winner)
+			|| !place_player(tournament_id, match->next_loser_match, match->next_loser_slot, loser)) {
+			get_db().execute("ROLLBACK;");
+			return false;
+		}
 	}
 
 	return get_db().execute("COMMIT;");
+}
+
+bool tournament_bracket::correct_match_report(int tournament_id, int match_id, int score_a, int score_b) {
+	auto match = get_match(tournament_id, match_id);
+	if (!match
+		|| match->state != StoredMatchState::Completed
+		|| score_a < 0
+		|| score_b < 0
+		|| score_a == score_b) {
+		return false;
+	}
+
+	const bool grand_final_reset_destination =
+		match->bracket == "grand_finals"
+		&& match->position == 0
+		&& match->next_winner_match < 0;
+
+	if (destination_completed(tournament_id, match->next_winner_match)
+		|| destination_completed(tournament_id, match->next_loser_match)
+		|| (grand_final_reset_destination && destination_completed(tournament_id, match->bracket_match_index + 1))) {
+		return false;
+	}
+
+	get_db().execute("BEGIN TRANSACTION;");
+
+	if (!clear_destination_slot(tournament_id, match->next_winner_match, match->next_winner_slot)
+		|| !clear_destination_slot(tournament_id, match->next_loser_match, match->next_loser_slot)
+		|| (grand_final_reset_destination && !clear_destination_slot(tournament_id, match->bracket_match_index + 1, 0))
+		|| (grand_final_reset_destination && !clear_destination_slot(tournament_id, match->bracket_match_index + 1, 1))) {
+		get_db().execute("ROLLBACK;");
+		return false;
+	}
+
+	sqlite3_stmt* stmt = nullptr;
+	const char* reset_sql =
+		"UPDATE tournament_matches "
+		"SET score_a = 0, score_b = 0, winner_id = '', state = 'ready' "
+		"WHERE tournament_id = ? AND id = ?;";
+
+	if (sqlite3_prepare_v2(get_db().handle(), reset_sql, -1, &stmt, nullptr) != SQLITE_OK) {
+		get_db().execute("ROLLBACK;");
+		return false;
+	}
+
+	sqlite3_bind_int(stmt, 1, tournament_id);
+	sqlite3_bind_int(stmt, 2, match_id);
+	const bool reset = sqlite3_step(stmt) == SQLITE_DONE && sqlite3_changes(get_db().handle()) > 0;
+	sqlite3_finalize(stmt);
+
+	if (!reset) {
+		get_db().execute("ROLLBACK;");
+		return false;
+	}
+
+	if (!get_db().execute("COMMIT;")) {
+		get_db().execute("ROLLBACK;");
+		return false;
+	}
+
+	return report_match(tournament_id, match_id, score_a, score_b);
 }
 
 std::string tournament_bracket::state_to_string(StoredMatchState state) {
@@ -387,7 +799,7 @@ std::string tournament_bracket::player_mention(const std::string& discord_id) {
 
 std::string tournament_bracket::describe_match(const StoredMatch& match) {
 	std::ostringstream out;
-	out << "M" << match.id << " R" << (match.round + 1) << "." << (match.position + 1)
+	out << "M" << match.id << " " << match.bracket << " R" << (match.round + 1) << "." << (match.position + 1)
 		<< ": " << player_mention(match.player_a_id)
 		<< " vs " << player_mention(match.player_b_id)
 		<< " [" << state_to_string(match.state) << "]";

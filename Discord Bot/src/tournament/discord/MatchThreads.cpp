@@ -1,4 +1,6 @@
 #include "tournament/discord/MatchThreads.hpp"
+#include "tournament/matchmaking.hpp"
+#include <ctime>
 #include <string>
 
 namespace {
@@ -16,7 +18,13 @@ dpp::embed tournament_discord::build_match_embed(const tournament_bracket::Store
 		.add_field("State", tournament_bracket::state_to_string(match.state), true)
 		.add_field("Player A", tournament_bracket::player_mention(match.player_a_id), true)
 		.add_field("Player B", tournament_bracket::player_mention(match.player_b_id), true)
-		.add_field("Score", std::to_string(match.score_a) + " - " + std::to_string(match.score_b), true);
+		.add_field("Score", std::to_string(match.score_a) + " - " + std::to_string(match.score_b), true)
+		.add_field("Check-ins", std::string(match.player_a_checked_in ? "A yes" : "A no") + " / " +
+			(match.player_b_checked_in ? "B yes" : "B no"), true);
+
+	if (match.match_opened_at > 0) {
+		embed.add_field("Grace until", std::to_string(match.match_opened_at + match.grace_time), true);
+	}
 
 	if (!match.winner_id.empty()) {
 		embed.add_field("Winner", tournament_bracket::player_mention(match.winner_id), false);
@@ -87,6 +95,12 @@ void tournament_discord::create_match_thread(
 
 			const dpp::thread thread = cb.get<dpp::thread>();
 			tournament_bracket::set_discord_thread(match.tournament_id, match.id, thread.id);
+			tournament_bracket::mark_match_opened(
+				match.tournament_id,
+				match.id,
+				static_cast<int>(time(nullptr)),
+				tournament_matchmaking::DEFAULT_MATCH_GRACE_TIME
+			);
 			bot.message_create(build_match_message(match, include_buttons).set_channel_id(thread.id));
 
 			if (!match.player_a_id.empty()) {

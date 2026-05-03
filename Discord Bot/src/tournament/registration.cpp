@@ -335,6 +335,34 @@ bool tournament_registration::set_participant_seed(int tournament_id, const std:
 	return success;
 }
 
+bool tournament_registration::set_participant_status(
+	int tournament_id,
+	const std::string& discord_id,
+	ParticipantStatus status
+) {
+	if (tournament_id <= 0 || discord_id.empty() || !init()) {
+		return false;
+	}
+
+	sqlite3_stmt* stmt = nullptr;
+	const char* sql =
+		"UPDATE tournament_participants "
+		"SET status = ? "
+		"WHERE tournament_id = ? AND discord_id = ?;";
+
+	if (sqlite3_prepare_v2(get_db().handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+		return false;
+	}
+
+	bind_text(stmt, 1, status_to_string(status));
+	sqlite3_bind_int(stmt, 2, tournament_id);
+	bind_text(stmt, 3, discord_id);
+
+	const bool success = sqlite3_step(stmt) == SQLITE_DONE && sqlite3_changes(get_db().handle()) > 0;
+	sqlite3_finalize(stmt);
+	return success;
+}
+
 std::optional<tournament_registration::ParticipantRecord> tournament_registration::get_participant(int tournament_id, const std::string& discord_id) {
 	if (tournament_id <= 0 || discord_id.empty() || !init()) {
 		return std::nullopt;

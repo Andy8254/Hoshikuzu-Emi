@@ -28,10 +28,22 @@ namespace tournament_bracket {
 		bool streamed = false;
 		dpp::snowflake thread_id = 0;
 		dpp::snowflake message_id = 0;
+		bool player_a_checked_in = false;
+		bool player_b_checked_in = false;
+		int match_opened_at = 0;
+		int grace_time = 600;
+		bool no_show_resolved = false;
+		std::string no_show_reason;
+		std::string pending_auto_dq_player_id;
+		int next_winner_match = -1;
+		int next_winner_slot = -1;
+		int next_loser_match = -1;
+		int next_loser_slot = -1;
 	};
 
 	bool init();
 	bool generate_single_elimination(int tournament_id);
+	bool generate_double_elimination(int tournament_id);
 	bool clear_matches(int tournament_id);
 
 	std::optional<StoredMatch> get_match(int tournament_id, int match_id);
@@ -42,8 +54,12 @@ namespace tournament_bracket {
 
 	bool assign_streamed(int tournament_id, int match_id, bool streamed);
 	bool set_discord_thread(int tournament_id, int match_id, dpp::snowflake thread_id, dpp::snowflake message_id = 0);
+	bool mark_match_opened(int tournament_id, int match_id, int opened_at, int grace_time = 600);
 	bool mark_checked_in(int tournament_id, int match_id, const std::string& discord_id);
 	bool report_match(int tournament_id, int match_id, int score_a, int score_b);
+	bool correct_match_report(int tournament_id, int match_id, int score_a, int score_b);
+	bool forfeit_player(int tournament_id, int match_id, const std::string& discord_id, const std::string& reason);
+	int resolve_due_no_shows(int tournament_id, int now);
 
 	std::string state_to_string(StoredMatchState state);
 	StoredMatchState state_from_string(const std::string& state);

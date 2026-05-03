@@ -77,6 +77,13 @@ namespace {
 		return "<#" + std::to_string(channel_id) + ">";
 	}
 
+	std::string format_display(const std::string& format) {
+		if (format == "double_elimination") return "Double elimination";
+		if (format == "round_robin") return "Round robin";
+		if (format == "swiss") return "Swiss";
+		return "Single elimination";
+	}
+
 	std::string user_display(const dpp::slashcommand_t& event, dpp::snowflake user_id) {
 		if (user_id == event.command.usr.id) {
 			return event.command.usr.username;
@@ -113,6 +120,28 @@ namespace {
 		const std::string& filecontent
 	) {
 		event.edit_response(dpp::message(content).add_file(filename, filecontent, "image/svg+xml"));
+	}
+
+	void log_tournament_event(
+		dpp::cluster& bot,
+		const dpp::slashcommand_t& event,
+		const std::string& title,
+		const std::string& description,
+		int color = 0x5f9ea0
+	) {
+		const dpp::snowflake channel_id = GuildConfigManager::get_tournament_log_channel(event.command.guild_id);
+		if (!channel_id) {
+			return;
+		}
+
+		dpp::embed embed = dpp::embed()
+			.set_title(title)
+			.set_description(description)
+			.set_color(color)
+			.set_timestamp(time(nullptr))
+			.set_footer(dpp::embed_footer().set_text("Action by " + event.command.usr.username));
+
+		bot.message_create(dpp::message(channel_id, "").add_embed(embed));
 	}
 
 	std::string yes_no(bool value) {
@@ -236,7 +265,8 @@ namespace {
 		dpp::embed embed = dpp::embed()
 			.set_title(tournament->name)
 			.set_color(0x5f9ea0)
-			.add_field("Game", tournament->game_type.empty() ? "Unspecified" : tournament->game_type, true)
+			.add_field("Platform", tournament->game_type.empty() ? "Unspecified" : tournament->game_type, true)
+			.add_field("Format", format_display(tournament->format), true)
 			.add_field("Status", tournament->status, true)
 			.add_field("Registration", yes_no(tournament->registration_open), true)
 			.add_field("Check-in", yes_no(tournament->checkin_open), true)
@@ -269,6 +299,8 @@ namespace {
 			.set_title("Staff tournament info: " + tournament->name)
 			.set_color(0xf0b429)
 			.add_field("Tournament ID", std::to_string(tournament->id), true)
+			.add_field("Platform", tournament->game_type.empty() ? "Unspecified" : tournament->game_type, true)
+			.add_field("Format", format_display(tournament->format), true)
 			.add_field("Status", tournament->status, true)
 			.add_field("Tournament channel", channel_display(configured_channel), false)
 			.add_field("Registration open", yes_no(tournament->registration_open), true)
@@ -290,8 +322,9 @@ namespace {
 
 		const std::string name = get_string_option(subcommand, "name");
 		const std::string game = get_string_option(subcommand, "game", "tetrio");
+		const std::string format = get_string_option(subcommand, "format", "single_elimination");
 
-		auto id = tournament_manage::create_tournament(name, game);
+		auto id = tournament_manage::create_tournament(name, game, format);
 		if (!id) {
 			edit_logged(event, "Could not create the tournament. Check the name and try again.");
 			return;
@@ -307,10 +340,12 @@ namespace {
 		tournament_manage::TournamentUpdate update;
 		update.name = get_string_option(subcommand, "name");
 		update.game_type = get_string_option(subcommand, "game");
+		update.format = get_string_option(subcommand, "format");
 		update.status = get_string_option(subcommand, "status");
 
 		if (update.name->empty()) update.name.reset();
 		if (update.game_type->empty()) update.game_type.reset();
+		if (update.format->empty()) update.format.reset();
 		if (update.status->empty()) update.status.reset();
 
 		const int tournament_id = get_int_option(subcommand, "id");
@@ -353,7 +388,7 @@ namespace {
 		edit_logged(event, "Tournament module data has been cleared. Player profile links were left untouched.");
 	}
 
-	void handle_register(const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
+	void handle_register(dpp::cluster& bot, const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
 		const dpp::snowflake target_id = get_snowflake_option(subcommand, "user");
 		const dpp::snowflake effective_user_id = target_id ? target_id : event.command.usr.id;
 		const bool staff_action = effective_user_id != event.command.usr.id;
@@ -381,6 +416,15 @@ namespace {
 			}
 			else {
 				edit_ephemeral(event, result.message);
+			}
+			if (result.ok) {
+				log_tournament_event(
+					bot,
+					event,
+					"Tournament Unregistration",
+					"Tournament `" + std::to_string(tournament_id) + "`: <@" + std::to_string(effective_user_id) + "> was unregistered.",
+					0xe05252
+				);
 			}
 			return;
 		}
@@ -424,9 +468,19 @@ namespace {
 		else {
 			edit_ephemeral(event, result.message);
 		}
+		if (result.ok) {
+			log_tournament_event(
+				bot,
+				event,
+				"Tournament Registration",
+				"Tournament `" + std::to_string(tournament_id) + "`: <@" + std::to_string(effective_user_id) +
+				"> registered as `" + username + "`.",
+				0x5f9ea0
+			);
+		}
 	}
 
-	void handle_checkin(const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
+	void handle_checkin(dpp::cluster& bot, const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
 		const dpp::snowflake target_id = get_snowflake_option(subcommand, "user");
 		const dpp::snowflake effective_user_id = target_id ? target_id : event.command.usr.id;
 		const bool staff_action = effective_user_id != event.command.usr.id;
@@ -454,6 +508,15 @@ namespace {
 			}
 			else {
 				edit_ephemeral(event, result.message);
+			}
+			if (result.ok) {
+				log_tournament_event(
+					bot,
+					event,
+					"Tournament Check-in Removed",
+					"Tournament `" + std::to_string(tournament_id) + "`: check-in was removed for <@" + std::to_string(effective_user_id) + ">.",
+					0xe05252
+				);
 			}
 			return;
 		}
@@ -493,6 +556,15 @@ namespace {
 		}
 		else {
 			edit_ephemeral(event, result.message);
+		}
+		if (result.ok) {
+			log_tournament_event(
+				bot,
+				event,
+				"Tournament Check-in",
+				"Tournament `" + std::to_string(tournament_id) + "`: <@" + std::to_string(effective_user_id) + "> checked in.",
+				0x7aa95c
+			);
 		}
 	}
 
@@ -540,18 +612,34 @@ namespace {
 		event.thinking(false);
 
 		const int tournament_id = get_int_option(subcommand, "id");
-		const std::string type = get_string_option(subcommand, "type", "single_elimination");
-		if (type != "single_elimination") {
-			edit_logged(event, "Only single-elimination bracket generation is available right now.");
+		const auto tournament = tournament_manage::get_tournament(tournament_id);
+		if (!tournament) {
+			edit_logged(event, "Tournament not found.");
 			return;
 		}
 
-		if (!tournament_bracket::generate_single_elimination(tournament_id)) {
+		const std::string type = get_string_option(subcommand, "type", tournament->format);
+
+		bool generated = false;
+		std::string label = "Single-elimination";
+		if (type == "double_elimination") {
+			generated = tournament_bracket::generate_double_elimination(tournament_id);
+			label = "Double-elimination";
+		}
+		else if (type != "single_elimination") {
+			edit_logged(event, "Bracket generation is currently available for single and double elimination only.");
+			return;
+		}
+		else {
+			generated = tournament_bracket::generate_single_elimination(tournament_id);
+		}
+
+		if (!generated) {
 			edit_logged(event, "Could not generate a bracket. Make sure at least two players are checked in.");
 			return;
 		}
 
-		edit_logged(event, "Single-elimination bracket generated for tournament `" + std::to_string(tournament_id) + "`.");
+		edit_logged(event, label + " bracket generated for tournament `" + std::to_string(tournament_id) + "`.");
 	}
 
 	void handle_matches_current(const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
@@ -580,7 +668,7 @@ namespace {
 		edit_logged_embed(event, tournament_discord::build_match_embed(*match));
 	}
 
-	void handle_match_report(const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
+	void handle_match_report(dpp::cluster& bot, const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
 		if (!require_manage(event)) return;
 		event.thinking(false);
 
@@ -595,6 +683,119 @@ namespace {
 		}
 
 		edit_logged(event, "Match `" + std::to_string(match_id) + "` reported.");
+		log_tournament_event(
+			bot,
+			event,
+			"Match Reported",
+			"Tournament `" + std::to_string(tournament_id) + "`, match `" + std::to_string(match_id) +
+			"`: `" + std::to_string(score_a) + "-" + std::to_string(score_b) + "`."
+		);
+	}
+
+	void handle_match_correct_report(dpp::cluster& bot, const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
+		if (!require_admin(event)) return;
+		event.thinking(false);
+
+		const int tournament_id = get_int_option(subcommand, "id");
+		const int match_id = get_int_option(subcommand, "match_id");
+		const int score_a = get_int_option(subcommand, "score_a");
+		const int score_b = get_int_option(subcommand, "score_b");
+		const std::string confirm = get_string_option(subcommand, "confirm");
+
+		if (confirm != "CORRECT") {
+			edit_logged(event, "Correction aborted. Type `CORRECT` in the `confirm` option.");
+			return;
+		}
+
+		if (!tournament_bracket::correct_match_report(tournament_id, match_id, score_a, score_b)) {
+			edit_logged(event, "Could not correct that match. Make sure affected downstream matches are not completed.");
+			return;
+		}
+
+		edit_logged(event, "Match `" + std::to_string(match_id) + "` corrected.");
+		log_tournament_event(
+			bot,
+			event,
+			"Match Corrected",
+			"Tournament `" + std::to_string(tournament_id) + "`, match `" + std::to_string(match_id) +
+			"` corrected to `" + std::to_string(score_a) + "-" + std::to_string(score_b) + "`.",
+			0xf0b429
+		);
+	}
+
+	void handle_match_forfeit(dpp::cluster& bot, const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
+		if (!require_manage(event)) return;
+		event.thinking(false);
+
+		const int tournament_id = get_int_option(subcommand, "id");
+		const int match_id = get_int_option(subcommand, "match_id");
+		const dpp::snowflake player_id = get_snowflake_option(subcommand, "player");
+		const std::string reason = get_string_option(subcommand, "reason", "forfeit");
+
+		if (!tournament_bracket::forfeit_player(tournament_id, match_id, std::to_string(player_id), reason)) {
+			edit_logged(event, "Could not forfeit that player. Make sure the match is ready/current and the selected user is in it.");
+			return;
+		}
+
+		edit_logged(event, "Forfeit recorded for <@" + std::to_string(player_id) + "> in match `" + std::to_string(match_id) + "`.");
+		log_tournament_event(
+			bot,
+			event,
+			"Match Forfeit",
+			"Tournament `" + std::to_string(tournament_id) + "`, match `" + std::to_string(match_id) +
+			"`: <@" + std::to_string(player_id) + "> forfeited. Reason: " + reason,
+			0xe05252
+		);
+	}
+
+	void handle_resolve_no_shows(dpp::cluster& bot, const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
+		if (!require_manage(event)) return;
+		event.thinking(false);
+
+		const int tournament_id = get_int_option(subcommand, "id");
+		const int resolved = tournament_bracket::resolve_due_no_shows(tournament_id, static_cast<int>(time(nullptr)));
+
+		edit_logged(event, "Resolved `" + std::to_string(resolved) + "` due no-show/DQ match state(s).");
+		if (resolved > 0) {
+			log_tournament_event(
+				bot,
+				event,
+				"No-shows Resolved",
+				"Tournament `" + std::to_string(tournament_id) + "`: `" + std::to_string(resolved) +
+				"` due no-show/DQ state(s) were resolved.",
+				0xf0b429
+			);
+		}
+	}
+
+	void handle_call_staff(dpp::cluster& bot, const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
+		event.thinking(true);
+
+		const int tournament_id = get_int_option(subcommand, "id");
+		const int match_id = get_int_option(subcommand, "match_id");
+		const std::string reason = get_string_option(subcommand, "reason", "Staff requested.");
+		auto match = tournament_bracket::get_match(tournament_id, match_id);
+		if (!match) {
+			edit_ephemeral(event, "Match not found.");
+			return;
+		}
+
+		const std::string caller_id = std::to_string(event.command.usr.id);
+		const bool is_player = caller_id == match->player_a_id || caller_id == match->player_b_id;
+		if (!is_player && !PermissionManager::can_manage_tournament(event)) {
+			edit_ephemeral(event, "Only match players or tournament staff can call staff for this match.");
+			return;
+		}
+
+		edit_ephemeral(event, "Staff has been called for match `" + std::to_string(match_id) + "`.");
+		log_tournament_event(
+			bot,
+			event,
+			"Staff Called",
+			"Tournament `" + std::to_string(tournament_id) + "`, match `" + std::to_string(match_id) +
+			"`: <@" + caller_id + "> called staff.\nReason: " + reason,
+			0xf0b429
+		);
 	}
 
 	void handle_stream_assign(const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
@@ -794,6 +995,45 @@ namespace {
 		edit_logged(event, "Tournament channel cleared.");
 	}
 
+	void handle_set_tournament_log_channel(const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
+		if (!require_role_config(event)) return;
+		event.thinking(false);
+
+		const dpp::snowflake channel_id = get_snowflake_option(subcommand, "channel");
+		if (!GuildConfigManager::set_tournament_log_channel(event.command.guild_id, channel_id)) {
+			edit_logged(event, "Could not set the tournament log channel.");
+			return;
+		}
+
+		edit_logged(event, "Tournament log channel updated: " + channel_display(channel_id));
+	}
+
+	void handle_clear_tournament_log_channel(const dpp::slashcommand_t& event) {
+		if (!require_role_config(event)) return;
+		event.thinking(false);
+
+		if (!GuildConfigManager::clear_tournament_log_channel(event.command.guild_id)) {
+			edit_logged(event, "Could not clear the tournament log channel.");
+			return;
+		}
+
+		edit_logged(event, "Tournament log channel cleared.");
+	}
+
+	void handle_set_tournament_format(const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
+		if (!require_manage(event)) return;
+		event.thinking(false);
+
+		const int tournament_id = get_int_option(subcommand, "id");
+		const std::string format = get_string_option(subcommand, "format");
+		if (!tournament_manage::set_tournament_format(tournament_id, format)) {
+			edit_logged(event, "Could not update the tournament format.");
+			return;
+		}
+
+		edit_logged(event, "Tournament format updated: " + format_display(format) + ".");
+	}
+
 	void handle_registration_open(const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
 		if (!require_manage(event)) return;
 		event.thinking(false);
@@ -973,6 +1213,9 @@ namespace {
 		if (subcommand.name == "clear_admin_role") return handle_clear_admin_role(event);
 		if (subcommand.name == "set_channel") return handle_set_tournament_channel(event, subcommand);
 		if (subcommand.name == "clear_channel") return handle_clear_tournament_channel(event);
+		if (subcommand.name == "log_channel_assign") return handle_set_tournament_log_channel(event, subcommand);
+		if (subcommand.name == "log_channel_clear") return handle_clear_tournament_log_channel(event);
+		if (subcommand.name == "set_format") return handle_set_tournament_format(event, subcommand);
 		if (subcommand.name == "ruleset_show") return handle_ruleset_show(event, subcommand);
 		if (subcommand.name == "ruleset_set_primary") return handle_ruleset_set_primary(event, subcommand);
 		if (subcommand.name == "ruleset_set_secondary") return handle_ruleset_set_secondary(event, subcommand);
@@ -993,7 +1236,10 @@ namespace {
 		if (subcommand.name == "current") return handle_matches_current(event, subcommand);
 		if (subcommand.name == "round") return handle_matches_round(event, subcommand);
 		if (subcommand.name == "match") return handle_match_show(event, subcommand);
-		if (subcommand.name == "report") return handle_match_report(event, subcommand);
+		if (subcommand.name == "report") return handle_match_report(bot, event, subcommand);
+		if (subcommand.name == "correct_report") return handle_match_correct_report(bot, event, subcommand);
+		if (subcommand.name == "forfeit") return handle_match_forfeit(bot, event, subcommand);
+		if (subcommand.name == "resolve_no_shows") return handle_resolve_no_shows(bot, event, subcommand);
 		if (subcommand.name == "threads") return handle_match_threads(bot, event, subcommand);
 		if (subcommand.name == "stream_assign") return handle_stream_assign(event, subcommand);
 		if (subcommand.name == "stream_clear") return handle_stream_clear(event, subcommand);
@@ -1025,15 +1271,16 @@ void register_tournament_commands(dpp::cluster& bot) {
 		if (subcommand.name == "registration_close") return handle_registration_close(event, subcommand);
 		if (subcommand.name == "checkin_open") return handle_checkin_open(event, subcommand);
 		if (subcommand.name == "checkin_close") return handle_checkin_close(event, subcommand);
-		if (subcommand.name == "register") return handle_register(event, subcommand);
-		if (subcommand.name == "checkin") return handle_checkin(event, subcommand);
+		if (subcommand.name == "register") return handle_register(bot, event, subcommand);
+		if (subcommand.name == "checkin") return handle_checkin(bot, event, subcommand);
 		if (subcommand.name == "participants") return handle_participants(event, subcommand);
 		if (subcommand.name == "seed") return handle_seed(event, subcommand);
+		if (subcommand.name == "call_staff") return handle_call_staff(bot, event, subcommand);
 		if (subcommand.name == "bracket_generate") return handle_bracket_generate(event, subcommand);
 		if (subcommand.name == "matches_current") return handle_matches_current(event, subcommand);
 		if (subcommand.name == "matches_round") return handle_matches_round(event, subcommand);
 		if (subcommand.name == "match_show") return handle_match_show(event, subcommand);
-		if (subcommand.name == "match_report") return handle_match_report(event, subcommand);
+		if (subcommand.name == "match_report") return handle_match_report(bot, event, subcommand);
 		if (subcommand.name == "match_threads") return handle_match_threads(bot, event, subcommand);
 		if (subcommand.name == "stream_assign") return handle_stream_assign(event, subcommand);
 		if (subcommand.name == "stream_clear") return handle_stream_clear(event, subcommand);

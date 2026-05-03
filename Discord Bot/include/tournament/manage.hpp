@@ -8,6 +8,7 @@ namespace tournament_manage {
 		int id = 0;
 		std::string name;
 		std::string game_type;
+		std::string format = "single_elimination";
 		std::string status;
 		bool registration_open = false;
 		bool checkin_open = false;
@@ -18,6 +19,7 @@ namespace tournament_manage {
 	struct TournamentUpdate {
 		std::optional<std::string> name;
 		std::optional<std::string> game_type;
+		std::optional<std::string> format;
 		std::optional<std::string> status;
 	};
 
@@ -26,12 +28,14 @@ namespace tournament_manage {
 	std::optional<int> create_tournament(
 		const std::string& name,
 		const std::string& game_type,
+		const std::string& format = "single_elimination",
 		const std::string& status = "open"
 	);
 
 	bool update_tournament(int tournament_id, const TournamentUpdate& update);
 	bool delete_tournament(int tournament_id);
 	bool clear_all_tournament_data();
+	bool set_tournament_format(int tournament_id, const std::string& format);
 	bool set_registration_open(int tournament_id, bool is_open);
 	bool set_checkin_open(int tournament_id, bool is_open, int closes_at, int grace_time);
 

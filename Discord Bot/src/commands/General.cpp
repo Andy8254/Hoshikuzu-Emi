@@ -42,11 +42,12 @@ void register_general_commands(dpp::cluster& bot) {
 				.add_field("Player", "`/codex player`", true)
 				.add_field("TETR.IO", "`/codex tetrio`", true)
 				.add_field("Brackets", "`/codex brackets`", true)
+				.add_field("Tournament", "`/codex tournament`", true)
+				.add_field("Settings", "`/codex settings`", true)
+				.add_field("Moderation", "`/codex moderation`", true)
 				.add_field("Miscellaneous", "`/codex misc`", true)
 				.set_footer(dpp::embed_footer().set_text("Use /codex [category] for more information on commands in that category."))
 				.set_timestamp(time(0));
-			//moderation hidden for now since it's reserved for authorised users only and may be expanded in the future
-				//.add_field("Moderation", "`/help moderation`", true);
 
 			event.reply(dpp::message().add_embed(help_embed));
 			return;

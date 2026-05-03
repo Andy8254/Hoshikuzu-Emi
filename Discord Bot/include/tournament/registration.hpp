@@ -60,6 +60,7 @@ namespace tournament_registration {
 	ParticipantResult check_in_player(const CheckInRequest& request);
 	ParticipantResult undo_check_in(int tournament_id, const std::string& discord_id);
 	bool set_participant_seed(int tournament_id, const std::string& discord_id, int seed);
+	bool set_participant_status(int tournament_id, const std::string& discord_id, ParticipantStatus status);
 
 	std::optional<ParticipantRecord> get_participant(int tournament_id, const std::string& discord_id);
 	std::vector<ParticipantRecord> list_participants(int tournament_id);

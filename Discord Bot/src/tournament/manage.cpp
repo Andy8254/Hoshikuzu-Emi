@@ -1,4 +1,8 @@
 #include "tournament/manage.hpp"
+#include "core/sqlite.hpp"
+#include "tournament/bracket/MatchStore.hpp"
+#include "tournament/registration.hpp"
+#include "tournament/ruleset.hpp"
 #include <filesystem>
 #include <iostream>
 #include <sqlite3.h>
@@ -75,16 +79,27 @@ namespace {
 		record.id = sqlite3_column_int(stmt, 0);
 		record.name = column_text(stmt, 1);
 		record.game_type = column_text(stmt, 2);
-		record.status = column_text(stmt, 3);
-		record.registration_open = sqlite3_column_int(stmt, 4) != 0;
-		record.checkin_open = sqlite3_column_int(stmt, 5) != 0;
-		record.checkin_closes_at = sqlite3_column_int(stmt, 6);
-		record.checkin_grace_time = sqlite3_column_int(stmt, 7);
+		record.format = column_text(stmt, 3);
+		if (record.format.empty()) {
+			record.format = "single_elimination";
+		}
+		record.status = column_text(stmt, 4);
+		record.registration_open = sqlite3_column_int(stmt, 5) != 0;
+		record.checkin_open = sqlite3_column_int(stmt, 6) != 0;
+		record.checkin_closes_at = sqlite3_column_int(stmt, 7);
+		record.checkin_grace_time = sqlite3_column_int(stmt, 8);
 		return record;
 	}
 
 	bool bind_text(sqlite3_stmt* stmt, int index, const std::string& value) {
 		return sqlite3_bind_text(stmt, index, value.c_str(), -1, SQLITE_TRANSIENT) == SQLITE_OK;
+	}
+
+	bool is_supported_format(const std::string& format) {
+		return format == "single_elimination"
+			|| format == "double_elimination"
+			|| format == "round_robin"
+			|| format == "swiss";
 	}
 }
 
@@ -94,6 +109,7 @@ bool tournament_manage::init() {
 		"id INTEGER PRIMARY KEY AUTOINCREMENT, "
 		"name TEXT NOT NULL, "
 		"game_type TEXT, "
+		"format TEXT DEFAULT 'single_elimination', "
 		"status TEXT DEFAULT 'open', "
 		"registration_open INTEGER DEFAULT 0, "
 		"checkin_open INTEGER DEFAULT 0, "
@@ -106,6 +122,7 @@ bool tournament_manage::init() {
 	}
 
 	const char* migrations[] = {
+		"ALTER TABLE tournaments ADD COLUMN format TEXT DEFAULT 'single_elimination';",
 		"ALTER TABLE tournaments ADD COLUMN registration_open INTEGER DEFAULT 0;",
 		"ALTER TABLE tournaments ADD COLUMN checkin_open INTEGER DEFAULT 0;",
 		"ALTER TABLE tournaments ADD COLUMN checkin_closes_at INTEGER DEFAULT 0;",
@@ -130,9 +147,14 @@ bool tournament_manage::init() {
 std::optional<int> tournament_manage::create_tournament(
 	const std::string& name,
 	const std::string& game_type,
+	const std::string& format,
 	const std::string& status
 ) {
 	if (name.empty()) {
+		return std::nullopt;
+	}
+
+	if (!is_supported_format(format)) {
 		return std::nullopt;
 	}
 
@@ -142,8 +164,8 @@ std::optional<int> tournament_manage::create_tournament(
 
 	sqlite3_stmt* stmt = nullptr;
 	const char* sql =
-		"INSERT INTO tournaments (name, game_type, status) "
-		"VALUES (?, ?, ?);";
+		"INSERT INTO tournaments (name, game_type, format, status) "
+		"VALUES (?, ?, ?, ?);";
 
 	if (sqlite3_prepare_v2(get_db().handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
 		return std::nullopt;
@@ -152,7 +174,8 @@ std::optional<int> tournament_manage::create_tournament(
 	const bool bound =
 		bind_text(stmt, 1, name)
 		&& bind_text(stmt, 2, game_type)
-		&& bind_text(stmt, 3, status);
+		&& bind_text(stmt, 3, format)
+		&& bind_text(stmt, 4, status);
 
 	const bool success = bound && sqlite3_step(stmt) == SQLITE_DONE;
 	sqlite3_finalize(stmt);
@@ -169,11 +192,15 @@ bool tournament_manage::update_tournament(int tournament_id, const TournamentUpd
 		return false;
 	}
 
-	if (!update.name && !update.game_type && !update.status) {
+	if (!update.name && !update.game_type && !update.format && !update.status) {
 		return false;
 	}
 
 	if (update.name && update.name->empty()) {
+		return false;
+	}
+
+	if (update.format && !is_supported_format(*update.format)) {
 		return false;
 	}
 
@@ -193,6 +220,12 @@ bool tournament_manage::update_tournament(int tournament_id, const TournamentUpd
 		if (!values.empty()) sql += ", ";
 		sql += "game_type = ?";
 		values.push_back(*update.game_type);
+	}
+
+	if (update.format) {
+		if (!values.empty()) sql += ", ";
+		sql += "format = ?";
+		values.push_back(*update.format);
 	}
 
 	if (update.status) {
@@ -252,6 +285,13 @@ bool tournament_manage::clear_all_tournament_data() {
 		return false;
 	}
 
+	if (!tournament_registration::init()
+		|| !tournament_ruleset::init()
+		|| !tournament_bracket::init()
+		|| !GuildConfigManager::init()) {
+		return false;
+	}
+
 	const char* sql =
 		"BEGIN TRANSACTION;"
 		"DELETE FROM tournament_matches;"
@@ -275,6 +315,29 @@ bool tournament_manage::clear_all_tournament_data() {
 
 	get_db().execute("ROLLBACK;");
 	return false;
+}
+
+bool tournament_manage::set_tournament_format(int tournament_id, const std::string& format) {
+	if (tournament_id <= 0 || !is_supported_format(format) || !init()) {
+		return false;
+	}
+
+	sqlite3_stmt* stmt = nullptr;
+	const char* sql =
+		"UPDATE tournaments "
+		"SET format = ? "
+		"WHERE id = ?;";
+
+	if (sqlite3_prepare_v2(get_db().handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+		return false;
+	}
+
+	bind_text(stmt, 1, format);
+	sqlite3_bind_int(stmt, 2, tournament_id);
+
+	const bool success = sqlite3_step(stmt) == SQLITE_DONE && sqlite3_changes(get_db().handle()) > 0;
+	sqlite3_finalize(stmt);
+	return success;
 }
 
 bool tournament_manage::set_registration_open(int tournament_id, bool is_open) {
@@ -339,7 +402,7 @@ std::optional<tournament_manage::TournamentRecord> tournament_manage::get_tourna
 
 	sqlite3_stmt* stmt = nullptr;
 	const char* sql =
-		"SELECT id, name, game_type, status, registration_open, checkin_open, checkin_closes_at, checkin_grace_time "
+		"SELECT id, name, game_type, format, status, registration_open, checkin_open, checkin_closes_at, checkin_grace_time "
 		"FROM tournaments "
 		"WHERE id = ? "
 		"LIMIT 1;";
@@ -367,7 +430,7 @@ std::vector<tournament_manage::TournamentRecord> tournament_manage::list_tournam
 
 	sqlite3_stmt* stmt = nullptr;
 	const char* sql =
-		"SELECT id, name, game_type, status, registration_open, checkin_open, checkin_closes_at, checkin_grace_time "
+		"SELECT id, name, game_type, format, status, registration_open, checkin_open, checkin_closes_at, checkin_grace_time "
 		"FROM tournaments "
 		"ORDER BY id DESC;";
 
@@ -391,7 +454,7 @@ std::vector<tournament_manage::TournamentRecord> tournament_manage::list_tournam
 
 	sqlite3_stmt* stmt = nullptr;
 	const char* sql =
-		"SELECT id, name, game_type, status, registration_open, checkin_open, checkin_closes_at, checkin_grace_time "
+		"SELECT id, name, game_type, format, status, registration_open, checkin_open, checkin_closes_at, checkin_grace_time "
 		"FROM tournaments "
 		"WHERE status = ? "
 		"ORDER BY id DESC;";

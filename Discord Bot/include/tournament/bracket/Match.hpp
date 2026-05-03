@@ -12,6 +12,8 @@ inline constexpr int DEST_CHAMPION = -2;
 inline constexpr int DEST_ELIMINATED = -3;
 
 struct Match {
+    std::string bracket = "winners";
+
     int round = 0;
     int position = 0;
 

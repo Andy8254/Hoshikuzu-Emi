@@ -2,8 +2,10 @@
 #include "core/Config.hpp"
 #include "core/CommandRegistry.hpp"
 #include "core/Fundamentals.hpp" //useless as (bleep)
+#include "core/sqlite.hpp"
 #include "commands/Discord_Commands.hpp"
 #include "tournament/bracket/MatchStore.hpp"
+#include <ctime>
 #include <exception>
 #include <iostream>
 #include <sstream>
@@ -12,6 +14,25 @@
 const dpp::snowflake MOD_CHANNEL_ID = 1498301392073396234;
 
 namespace {
+    dpp::command_option& add_platform_choices(dpp::command_option& option) {
+        return option
+            .add_choice(dpp::command_option_choice("TETR.IO", "tetrio"))
+            .add_choice(dpp::command_option_choice("Jstris", "jstris"))
+            .add_choice(dpp::command_option_choice("Puyo Puyo Tetris 2", "ppt2"))
+            .add_choice(dpp::command_option_choice("Tetris Effect: Connected", "tec"))
+            .add_choice(dpp::command_option_choice("Tetra eSports", "tetra"))
+            .add_choice(dpp::command_option_choice("Classic Tetris", "ctwc"))
+            .add_choice(dpp::command_option_choice("Other", "other"));
+    }
+
+    dpp::command_option& add_format_choices(dpp::command_option& option) {
+        return option
+            .add_choice(dpp::command_option_choice("Single elimination", "single_elimination"))
+            .add_choice(dpp::command_option_choice("Double elimination", "double_elimination"))
+            .add_choice(dpp::command_option_choice("Round robin", "round_robin")) //to be implemented in BETA
+            .add_choice(dpp::command_option_choice("Swiss", "swiss")); //to be implemented in BETA
+    }
+
     std::vector<std::string> split_custom_id(const std::string& value) {
         std::vector<std::string> parts;
         std::stringstream stream(value);
@@ -22,7 +43,29 @@ namespace {
         return parts;
     }
 
-    void handle_tournament_button(const dpp::button_click_t& event) {
+    void send_tournament_button_log(
+        dpp::cluster& bot,
+        const dpp::button_click_t& event,
+        const std::string& title,
+        const std::string& description,
+        int color = 0xf0b429
+    ) {
+        const dpp::snowflake channel_id = GuildConfigManager::get_tournament_log_channel(event.command.guild_id);
+        if (!channel_id) {
+            return;
+        }
+
+        dpp::embed embed = dpp::embed()
+            .set_title(title)
+            .set_description(description)
+            .set_color(color)
+            .set_timestamp(time(nullptr))
+            .set_footer(dpp::embed_footer().set_text("Action by " + event.command.usr.username));
+
+        bot.message_create(dpp::message(channel_id, "").add_embed(embed));
+    }
+
+    void handle_tournament_button(dpp::cluster& bot, const dpp::button_click_t& event) {
         const auto parts = split_custom_id(event.custom_id);
         if (parts.size() != 4 || parts[0] != "tournament") {
             return;
@@ -54,7 +97,27 @@ namespace {
         }
 
         if (action == "call_staff") {
-            event.reply("Staff has been called for match `" + std::to_string(match_id) + "`.");
+            auto match = tournament_bracket::get_match(tournament_id, match_id);
+            const std::string caller_id = std::to_string(event.command.usr.id);
+            if (!match || (caller_id != match->player_a_id && caller_id != match->player_b_id)) {
+                event.reply(
+                    dpp::message("Only match players can call staff from this match button.")
+                    .set_flags(dpp::m_ephemeral)
+                );
+                return;
+            }
+
+            event.reply(
+                dpp::message("Staff has been called for match `" + std::to_string(match_id) + "`.")
+                .set_flags(dpp::m_ephemeral)
+            );
+            send_tournament_button_log(
+                bot,
+                event,
+                "Staff Called",
+                "Tournament `" + std::to_string(tournament_id) + "`, match `" + std::to_string(match_id) +
+                "`: <@" + caller_id + "> called staff from the match button."
+            );
         }
     }
 }
@@ -68,6 +131,8 @@ int main() {
     register_player_commands(bot);   // From Player.cpp
     register_tetrio_commands(bot);   // From Tetrio.cpp
     register_tournament_commands(bot);
+    register_settings_commands(bot);
+    register_moderation_commands(bot);
 
     bot.on_ready([&bot](const dpp::ready_t& event) {
         if (dpp::run_once<struct register_commands>()) {
@@ -88,6 +153,9 @@ int main() {
                 .add_choice(dpp::command_option_choice("player", "player"))
                 .add_choice(dpp::command_option_choice("tetrio", "tetrio"))
                 .add_choice(dpp::command_option_choice("brackets", "brackets"))
+                .add_choice(dpp::command_option_choice("tournament", "tournament"))
+                .add_choice(dpp::command_option_choice("settings", "settings"))
+                .add_choice(dpp::command_option_choice("moderation", "moderation"))
                 .add_choice(dpp::command_option_choice("misc", "misc"))
             );
             codex.add_option(
@@ -157,17 +225,94 @@ int main() {
             bot.global_command_create(tetrio_cmd);
 
             // -- Guild Commands --
+            dpp::slashcommand settings("settings", "Server settings", app_id);
+
+            dpp::command_option settings_show(dpp::co_sub_command, "show", "Show server settings");
+            settings.add_option(settings_show);
+
+            dpp::command_option settings_set_admin(dpp::co_sub_command, "set_admin_role", "Owner-only: set server admin role");
+            settings_set_admin.add_option(dpp::command_option(dpp::co_role, "role", "Server admin role", true));
+            settings.add_option(settings_set_admin);
+
+            dpp::command_option settings_set_mod(dpp::co_sub_command, "set_moderator_role", "Admin-only: set server moderator role");
+            settings_set_mod.add_option(dpp::command_option(dpp::co_role, "role", "Server moderator role", true));
+            settings.add_option(settings_set_mod);
+
+            dpp::command_option settings_set_staff(dpp::co_sub_command, "set_staff_role", "Moderator-only: set server staff role");
+            settings_set_staff.add_option(dpp::command_option(dpp::co_role, "role", "Server staff role", true));
+            settings.add_option(settings_set_staff);
+
+            dpp::command_option settings_language(dpp::co_sub_command, "language", "Set server language placeholder");
+            settings_language.add_option(dpp::command_option(dpp::co_string, "language", "Language", false)
+                .add_choice(dpp::command_option_choice("English (GB)", "EN-gb")));
+            settings.add_option(settings_language);
+
+            dpp::command_option settings_modlog_set(dpp::co_sub_command, "modlog_set", "Set moderation log channel");
+            settings_modlog_set.add_option(dpp::command_option(dpp::co_channel, "channel", "Moderation log channel", true));
+            settings.add_option(settings_modlog_set);
+
+            dpp::command_option settings_modlog_clear(dpp::co_sub_command, "modlog_clear", "Clear moderation log channel");
+            settings.add_option(settings_modlog_clear);
+
+            dpp::slashcommand mod("mod", "Manual moderation tools", app_id);
+
+            dpp::command_option mod_warn(dpp::co_sub_command, "warn", "Record a warning");
+            mod_warn.add_option(dpp::command_option(dpp::co_user, "user", "Target user", true));
+            mod_warn.add_option(dpp::command_option(dpp::co_string, "reason", "Reason", true));
+            mod.add_option(mod_warn);
+
+            dpp::command_option mod_note(dpp::co_sub_command, "note", "Record a staff note");
+            mod_note.add_option(dpp::command_option(dpp::co_user, "user", "Target user", true));
+            mod_note.add_option(dpp::command_option(dpp::co_string, "note", "Note", true));
+            mod.add_option(mod_note);
+
+            dpp::command_option mod_history(dpp::co_sub_command, "history", "Show moderation history");
+            mod_history.add_option(dpp::command_option(dpp::co_user, "user", "Target user", true));
+            mod.add_option(mod_history);
+
+            dpp::command_option mod_timeout(dpp::co_sub_command, "timeout", "Timeout a user");
+            mod_timeout.add_option(dpp::command_option(dpp::co_user, "user", "Target user", true));
+            mod_timeout.add_option(dpp::command_option(dpp::co_integer, "duration", "Duration in seconds, max 2419200", true));
+            mod_timeout.add_option(dpp::command_option(dpp::co_string, "reason", "Reason", true));
+            mod.add_option(mod_timeout);
+
+            dpp::command_option mod_clear_timeout(dpp::co_sub_command, "clear_timeout", "Clear a user timeout");
+            mod_clear_timeout.add_option(dpp::command_option(dpp::co_user, "user", "Target user", true));
+            mod_clear_timeout.add_option(dpp::command_option(dpp::co_string, "reason", "Reason", false));
+            mod.add_option(mod_clear_timeout);
+
+            dpp::command_option mod_kick(dpp::co_sub_command, "kick", "Kick a user");
+            mod_kick.add_option(dpp::command_option(dpp::co_user, "user", "Target user", true));
+            mod_kick.add_option(dpp::command_option(dpp::co_string, "reason", "Reason", true));
+            mod.add_option(mod_kick);
+
+            dpp::command_option mod_ban(dpp::co_sub_command, "ban", "Ban a user");
+            mod_ban.add_option(dpp::command_option(dpp::co_user, "user", "Target user", true));
+            mod_ban.add_option(dpp::command_option(dpp::co_string, "reason", "Reason", true));
+            mod.add_option(mod_ban);
+
+            dpp::command_option mod_unban(dpp::co_sub_command, "unban", "Unban a user");
+            mod_unban.add_option(dpp::command_option(dpp::co_user, "user", "Target user", true));
+            mod_unban.add_option(dpp::command_option(dpp::co_string, "reason", "Reason", false));
+            mod.add_option(mod_unban);
+
             dpp::slashcommand tournament("tournament", "Tournament management and player workflows", app_id);
 
             dpp::command_option create(dpp::co_sub_command, "create", "Create a tournament");
             create.add_option(dpp::command_option(dpp::co_string, "name", "Tournament name", true));
-            create.add_option(dpp::command_option(dpp::co_string, "game", "Game or ruleset", false));
+            dpp::command_option create_game(dpp::co_string, "game", "Platform or game", false);
+            create.add_option(add_platform_choices(create_game));
+            dpp::command_option create_format(dpp::co_string, "format", "Tournament format", false);
+            create.add_option(add_format_choices(create_format));
             tournament.add_option(create);
 
             dpp::command_option edit(dpp::co_sub_command, "edit", "Edit a tournament");
             edit.add_option(dpp::command_option(dpp::co_integer, "id", "Tournament ID", true));
             edit.add_option(dpp::command_option(dpp::co_string, "name", "New tournament name", false));
-            edit.add_option(dpp::command_option(dpp::co_string, "game", "New game or ruleset", false));
+            dpp::command_option edit_game(dpp::co_string, "game", "New platform or game", false);
+            edit.add_option(add_platform_choices(edit_game));
+            dpp::command_option edit_format(dpp::co_string, "format", "New tournament format", false);
+            edit.add_option(add_format_choices(edit_format));
             edit.add_option(dpp::command_option(dpp::co_string, "status", "New status", false)
                 .add_choice(dpp::command_option_choice("Open", "open"))
                 .add_choice(dpp::command_option_choice("Check-in", "checkin"))
@@ -223,6 +368,12 @@ int main() {
             checkin.add_option(dpp::command_option(dpp::co_user, "user", "Staff target player", false));
             tournament.add_option(checkin);
 
+            dpp::command_option call_staff(dpp::co_sub_command, "call_staff", "Call tournament staff for a match");
+            call_staff.add_option(dpp::command_option(dpp::co_integer, "id", "Tournament ID", true));
+            call_staff.add_option(dpp::command_option(dpp::co_integer, "match_id", "Match ID", true));
+            call_staff.add_option(dpp::command_option(dpp::co_string, "reason", "What needs staff attention", false));
+            tournament.add_option(call_staff);
+
             dpp::command_option participants(dpp::co_sub_command, "participants", "List tournament participants");
             participants.add_option(dpp::command_option(dpp::co_integer, "id", "Tournament ID", true));
             tournament.add_option(participants);
@@ -238,8 +389,8 @@ int main() {
 
             dpp::command_option bracket_generate(dpp::co_sub_command, "generate", "Generate a bracket from checked-in players");
             bracket_generate.add_option(dpp::command_option(dpp::co_integer, "id", "Tournament ID", true));
-            bracket_generate.add_option(dpp::command_option(dpp::co_string, "type", "Bracket type", false)
-                .add_choice(dpp::command_option_choice("Single elimination", "single_elimination")));
+            dpp::command_option bracket_type(dpp::co_string, "type", "Bracket type, or omit to use tournament format", false);
+            bracket_generate.add_option(add_format_choices(bracket_type));
             bracket.add_option(bracket_generate);
 
             dpp::command_option bracket_current(dpp::co_sub_command, "current", "Show current playable matches");
@@ -262,6 +413,25 @@ int main() {
             bracket_report.add_option(dpp::command_option(dpp::co_integer, "score_a", "Player A score", true));
             bracket_report.add_option(dpp::command_option(dpp::co_integer, "score_b", "Player B score", true));
             bracket.add_option(bracket_report);
+
+            dpp::command_option bracket_correct_report(dpp::co_sub_command, "correct_report", "Admin-only correction for a completed match");
+            bracket_correct_report.add_option(dpp::command_option(dpp::co_integer, "id", "Tournament ID", true));
+            bracket_correct_report.add_option(dpp::command_option(dpp::co_integer, "match_id", "Match ID", true));
+            bracket_correct_report.add_option(dpp::command_option(dpp::co_integer, "score_a", "Corrected Player A score", true));
+            bracket_correct_report.add_option(dpp::command_option(dpp::co_integer, "score_b", "Corrected Player B score", true));
+            bracket_correct_report.add_option(dpp::command_option(dpp::co_string, "confirm", "Type CORRECT to confirm", true));
+            bracket.add_option(bracket_correct_report);
+
+            dpp::command_option bracket_forfeit(dpp::co_sub_command, "forfeit", "Staff records a player forfeit/DQ in a match");
+            bracket_forfeit.add_option(dpp::command_option(dpp::co_integer, "id", "Tournament ID", true));
+            bracket_forfeit.add_option(dpp::command_option(dpp::co_integer, "match_id", "Match ID", true));
+            bracket_forfeit.add_option(dpp::command_option(dpp::co_user, "player", "Player to forfeit", true));
+            bracket_forfeit.add_option(dpp::command_option(dpp::co_string, "reason", "Forfeit/DQ reason", false));
+            bracket.add_option(bracket_forfeit);
+
+            dpp::command_option bracket_resolve_no_shows(dpp::co_sub_command, "resolve_no_shows", "Resolve due match no-shows and auto-DQs");
+            bracket_resolve_no_shows.add_option(dpp::command_option(dpp::co_integer, "id", "Tournament ID", true));
+            bracket.add_option(bracket_resolve_no_shows);
 
             dpp::command_option bracket_threads(dpp::co_sub_command, "threads", "Create Discord threads for current or round matches");
             bracket_threads.add_option(dpp::command_option(dpp::co_integer, "id", "Tournament ID", true));
@@ -320,6 +490,19 @@ int main() {
             dpp::command_option config_clear_channel(dpp::co_sub_command, "clear_channel", "Clear tournament registration/check-in channel");
             config.add_option(config_clear_channel);
 
+            dpp::command_option config_log_channel_assign(dpp::co_sub_command, "log_channel_assign", "Set tournament audit log channel");
+            config_log_channel_assign.add_option(dpp::command_option(dpp::co_channel, "channel", "Tournament log channel", true));
+            config.add_option(config_log_channel_assign);
+
+            dpp::command_option config_log_channel_clear(dpp::co_sub_command, "log_channel_clear", "Clear tournament audit log channel");
+            config.add_option(config_log_channel_clear);
+
+            dpp::command_option config_set_format(dpp::co_sub_command, "set_format", "Set a tournament's default format");
+            config_set_format.add_option(dpp::command_option(dpp::co_integer, "id", "Tournament ID", true));
+            dpp::command_option config_format(dpp::co_string, "format", "Tournament format", true);
+            config_set_format.add_option(add_format_choices(config_format));
+            config.add_option(config_set_format);
+
             dpp::command_option ruleset_show(dpp::co_sub_command, "ruleset_show", "Show tournament rulesets");
             ruleset_show.add_option(dpp::command_option(dpp::co_integer, "id", "Tournament ID", true));
             config.add_option(ruleset_show);
@@ -375,6 +558,14 @@ int main() {
             tournament.add_option(clear_admin_role);
 
             for (const auto& guild_id : event.guilds) {
+                bot.guild_get(guild_id, [guild_id](const dpp::confirmation_callback_t& cb) {
+                    if (!cb.is_error()) {
+                        const dpp::guild guild = std::get<dpp::guild>(cb.value);
+                        ServerSettingsManager::set_owner_if_empty(guild_id, guild.owner_id);
+                    }
+                });
+                bot.guild_command_create(settings, guild_id);
+                bot.guild_command_create(mod, guild_id);
                 bot.guild_command_create(tournament, guild_id);
             }
 
@@ -408,9 +599,9 @@ int main() {
         }
     });
 
-    bot.on_button_click([](const dpp::button_click_t& event) {
+    bot.on_button_click([&bot](const dpp::button_click_t& event) {
         try {
-            handle_tournament_button(event);
+            handle_tournament_button(bot, event);
         }
         catch (const std::exception& e) {
             std::cerr << "Button interaction failed: " << e.what() << std::endl;

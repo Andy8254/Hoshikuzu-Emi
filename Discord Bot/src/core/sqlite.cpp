@@ -272,26 +272,30 @@ bool GuildConfigManager::init() {
         "guild_id INTEGER PRIMARY KEY,"
         "tournament_staff_role_id INTEGER,"
         "tournament_admin_role_id INTEGER,"
-        "tournament_channel_id INTEGER"
+        "tournament_channel_id INTEGER,"
+        "tournament_log_channel_id INTEGER"
         ");";
 
     if (!get_db().execute(sql)) {
         return false;
     }
 
-    char* error = nullptr;
-    const int rc = sqlite3_exec(
-        get_db().get_handle(),
+    const char* migrations[] = {
         "ALTER TABLE guild_config ADD COLUMN tournament_channel_id INTEGER;",
-        nullptr,
-        nullptr,
-        &error
-    );
+        "ALTER TABLE guild_config ADD COLUMN tournament_log_channel_id INTEGER;"
+    };
 
-    if (rc != SQLITE_OK) {
-        const std::string message = error ? error : "";
-        sqlite3_free(error);
-        return message.find("duplicate column name") != std::string::npos;
+    for (const char* migration : migrations) {
+        char* error = nullptr;
+        const int rc = sqlite3_exec(get_db().get_handle(), migration, nullptr, nullptr, &error);
+
+        if (rc != SQLITE_OK) {
+            const std::string message = error ? error : "";
+            sqlite3_free(error);
+            if (message.find("duplicate column name") == std::string::npos) {
+                return false;
+            }
+        }
     }
 
     return true;
@@ -475,6 +479,439 @@ dpp::snowflake GuildConfigManager::get_tournament_channel(dpp::snowflake guild_i
         if (sqlite3_step(stmt) == SQLITE_ROW) {
             result = static_cast<dpp::snowflake>(sqlite3_column_int64(stmt, 0));
         }
+    }
+
+    sqlite3_finalize(stmt);
+    return result;
+}
+
+bool GuildConfigManager::set_tournament_log_channel(dpp::snowflake guild_id, dpp::snowflake channel_id) {
+    if (!init()) {
+        return false;
+    }
+
+    sqlite3_stmt* stmt;
+    const char* sql =
+        "INSERT INTO guild_config (guild_id, tournament_log_channel_id) "
+        "VALUES (?, ?) "
+        "ON CONFLICT(guild_id) DO UPDATE SET "
+        "tournament_log_channel_id = excluded.tournament_log_channel_id;";
+
+    if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK)
+        return false;
+
+    sqlite3_bind_int64(stmt, 1, guild_id);
+    sqlite3_bind_int64(stmt, 2, channel_id);
+
+    bool success = (sqlite3_step(stmt) == SQLITE_DONE);
+    sqlite3_finalize(stmt);
+    return success;
+}
+
+bool GuildConfigManager::clear_tournament_log_channel(dpp::snowflake guild_id) {
+    if (!init()) {
+        return false;
+    }
+
+    sqlite3_stmt* stmt;
+    const char* sql =
+        "INSERT INTO guild_config (guild_id, tournament_log_channel_id) "
+        "VALUES (?, NULL) "
+        "ON CONFLICT(guild_id) DO UPDATE SET "
+        "tournament_log_channel_id = NULL;";
+
+    if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK)
+        return false;
+
+    sqlite3_bind_int64(stmt, 1, guild_id);
+
+    bool success = (sqlite3_step(stmt) == SQLITE_DONE);
+    sqlite3_finalize(stmt);
+    return success;
+}
+
+dpp::snowflake GuildConfigManager::get_tournament_log_channel(dpp::snowflake guild_id) {
+    if (!init()) {
+        return 0;
+    }
+
+    sqlite3_stmt* stmt;
+    dpp::snowflake result = 0;
+
+    const char* sql =
+        "SELECT tournament_log_channel_id FROM guild_config WHERE guild_id = ? LIMIT 1;";
+
+    if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) == SQLITE_OK) {
+        sqlite3_bind_int64(stmt, 1, guild_id);
+
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            result = static_cast<dpp::snowflake>(sqlite3_column_int64(stmt, 0));
+        }
+    }
+
+    sqlite3_finalize(stmt);
+    return result;
+}
+
+Database& ServerSettingsManager::get_db() {
+    static Database instance("db/master.db");
+    return instance;
+}
+
+bool ServerSettingsManager::init() {
+    const char* sql =
+        "CREATE TABLE IF NOT EXISTS server_settings ("
+        "guild_id INTEGER PRIMARY KEY,"
+        "owner_id INTEGER,"
+        "admin_role_id INTEGER,"
+        "moderator_role_id INTEGER,"
+        "staff_role_id INTEGER,"
+        "language TEXT DEFAULT 'EN-gb',"
+        "modlog_channel_id INTEGER"
+        ");";
+
+    if (!get_db().execute(sql)) {
+        return false;
+    }
+
+    const char* migrations[] = {
+        "ALTER TABLE server_settings ADD COLUMN owner_id INTEGER;",
+        "ALTER TABLE server_settings ADD COLUMN admin_role_id INTEGER;",
+        "ALTER TABLE server_settings ADD COLUMN moderator_role_id INTEGER;",
+        "ALTER TABLE server_settings ADD COLUMN staff_role_id INTEGER;",
+        "ALTER TABLE server_settings ADD COLUMN language TEXT DEFAULT 'EN-gb';",
+        "ALTER TABLE server_settings ADD COLUMN modlog_channel_id INTEGER;"
+    };
+
+    for (const char* migration : migrations) {
+        char* error = nullptr;
+        const int rc = sqlite3_exec(get_db().get_handle(), migration, nullptr, nullptr, &error);
+        if (rc != SQLITE_OK) {
+            const std::string message = error ? error : "";
+            sqlite3_free(error);
+            if (message.find("duplicate column name") == std::string::npos) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+bool ServerSettingsManager::set_owner_if_empty(dpp::snowflake guild_id, dpp::snowflake owner_id) {
+    if (!init() || !guild_id || !owner_id) {
+        return false;
+    }
+
+    sqlite3_stmt* stmt;
+    const char* sql =
+        "INSERT INTO server_settings (guild_id, owner_id, language) "
+        "VALUES (?, ?, 'EN-gb') "
+        "ON CONFLICT(guild_id) DO UPDATE SET "
+        "owner_id = CASE "
+        "WHEN server_settings.owner_id IS NULL OR server_settings.owner_id = 0 THEN excluded.owner_id "
+        "ELSE server_settings.owner_id END;";
+
+    if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        return false;
+    }
+
+    sqlite3_bind_int64(stmt, 1, guild_id);
+    sqlite3_bind_int64(stmt, 2, owner_id);
+    const bool success = sqlite3_step(stmt) == SQLITE_DONE;
+    sqlite3_finalize(stmt);
+    return success;
+}
+
+dpp::snowflake ServerSettingsManager::get_owner(dpp::snowflake guild_id) {
+    if (!init()) {
+        return 0;
+    }
+
+    sqlite3_stmt* stmt;
+    dpp::snowflake result = 0;
+    const char* sql = "SELECT owner_id FROM server_settings WHERE guild_id = ? LIMIT 1;";
+
+    if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) == SQLITE_OK) {
+        sqlite3_bind_int64(stmt, 1, guild_id);
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            result = static_cast<dpp::snowflake>(sqlite3_column_int64(stmt, 0));
+        }
+    }
+
+    sqlite3_finalize(stmt);
+    return result;
+}
+
+namespace {
+    bool set_server_role_column(dpp::snowflake guild_id, dpp::snowflake role_id, const char* column) {
+        if (!ServerSettingsManager::init() || !guild_id || !role_id) {
+            return false;
+        }
+
+        std::string sql = std::string("INSERT INTO server_settings (guild_id, ") + column + ") "
+            "VALUES (?, ?) "
+            "ON CONFLICT(guild_id) DO UPDATE SET " + column + " = excluded." + column + ";";
+
+        sqlite3_stmt* stmt;
+        if (sqlite3_prepare_v2(ServerSettingsManager::get_db().get_handle(), sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+            return false;
+        }
+
+        sqlite3_bind_int64(stmt, 1, guild_id);
+        sqlite3_bind_int64(stmt, 2, role_id);
+        const bool success = sqlite3_step(stmt) == SQLITE_DONE;
+        sqlite3_finalize(stmt);
+        return success;
+    }
+
+    dpp::snowflake get_server_role_column(dpp::snowflake guild_id, const char* column) {
+        if (!ServerSettingsManager::init()) {
+            return 0;
+        }
+
+        std::string sql = std::string("SELECT ") + column + " FROM server_settings WHERE guild_id = ? LIMIT 1;";
+        sqlite3_stmt* stmt;
+        dpp::snowflake result = 0;
+
+        if (sqlite3_prepare_v2(ServerSettingsManager::get_db().get_handle(), sql.c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
+            sqlite3_bind_int64(stmt, 1, guild_id);
+            if (sqlite3_step(stmt) == SQLITE_ROW) {
+                result = static_cast<dpp::snowflake>(sqlite3_column_int64(stmt, 0));
+            }
+        }
+
+        sqlite3_finalize(stmt);
+        return result;
+    }
+}
+
+bool ServerSettingsManager::set_admin_role(dpp::snowflake guild_id, dpp::snowflake role_id) {
+    return set_server_role_column(guild_id, role_id, "admin_role_id");
+}
+
+dpp::snowflake ServerSettingsManager::get_admin_role(dpp::snowflake guild_id) {
+    return get_server_role_column(guild_id, "admin_role_id");
+}
+
+bool ServerSettingsManager::set_moderator_role(dpp::snowflake guild_id, dpp::snowflake role_id) {
+    return set_server_role_column(guild_id, role_id, "moderator_role_id");
+}
+
+dpp::snowflake ServerSettingsManager::get_moderator_role(dpp::snowflake guild_id) {
+    return get_server_role_column(guild_id, "moderator_role_id");
+}
+
+bool ServerSettingsManager::set_staff_role(dpp::snowflake guild_id, dpp::snowflake role_id) {
+    return set_server_role_column(guild_id, role_id, "staff_role_id");
+}
+
+dpp::snowflake ServerSettingsManager::get_staff_role(dpp::snowflake guild_id) {
+    return get_server_role_column(guild_id, "staff_role_id");
+}
+
+bool ServerSettingsManager::set_language(dpp::snowflake guild_id, const std::string& language) {
+    if (!init() || !guild_id || language.empty()) {
+        return false;
+    }
+
+    sqlite3_stmt* stmt;
+    const char* sql =
+        "INSERT INTO server_settings (guild_id, language) "
+        "VALUES (?, ?) "
+        "ON CONFLICT(guild_id) DO UPDATE SET language = excluded.language;";
+
+    if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        return false;
+    }
+
+    sqlite3_bind_int64(stmt, 1, guild_id);
+    sqlite3_bind_text(stmt, 2, language.c_str(), -1, SQLITE_TRANSIENT);
+    const bool success = sqlite3_step(stmt) == SQLITE_DONE;
+    sqlite3_finalize(stmt);
+    return success;
+}
+
+std::string ServerSettingsManager::get_language(dpp::snowflake guild_id) {
+    if (!init()) {
+        return "EN-gb";
+    }
+
+    sqlite3_stmt* stmt;
+    std::string result = "EN-gb";
+    const char* sql = "SELECT language FROM server_settings WHERE guild_id = ? LIMIT 1;";
+
+    if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) == SQLITE_OK) {
+        sqlite3_bind_int64(stmt, 1, guild_id);
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            const unsigned char* value = sqlite3_column_text(stmt, 0);
+            if (value) {
+                result = reinterpret_cast<const char*>(value);
+            }
+        }
+    }
+
+    sqlite3_finalize(stmt);
+    return result;
+}
+
+bool ServerSettingsManager::set_modlog_channel(dpp::snowflake guild_id, dpp::snowflake channel_id) {
+    if (!init() || !guild_id || !channel_id) {
+        return false;
+    }
+
+    sqlite3_stmt* stmt;
+    const char* sql =
+        "INSERT INTO server_settings (guild_id, modlog_channel_id) "
+        "VALUES (?, ?) "
+        "ON CONFLICT(guild_id) DO UPDATE SET modlog_channel_id = excluded.modlog_channel_id;";
+
+    if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        return false;
+    }
+
+    sqlite3_bind_int64(stmt, 1, guild_id);
+    sqlite3_bind_int64(stmt, 2, channel_id);
+    const bool success = sqlite3_step(stmt) == SQLITE_DONE;
+    sqlite3_finalize(stmt);
+    return success;
+}
+
+bool ServerSettingsManager::clear_modlog_channel(dpp::snowflake guild_id) {
+    if (!init() || !guild_id) {
+        return false;
+    }
+
+    sqlite3_stmt* stmt;
+    const char* sql =
+        "INSERT INTO server_settings (guild_id, modlog_channel_id) "
+        "VALUES (?, NULL) "
+        "ON CONFLICT(guild_id) DO UPDATE SET modlog_channel_id = NULL;";
+
+    if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        return false;
+    }
+
+    sqlite3_bind_int64(stmt, 1, guild_id);
+    const bool success = sqlite3_step(stmt) == SQLITE_DONE;
+    sqlite3_finalize(stmt);
+    return success;
+}
+
+dpp::snowflake ServerSettingsManager::get_modlog_channel(dpp::snowflake guild_id) {
+    if (!init()) {
+        return 0;
+    }
+
+    sqlite3_stmt* stmt;
+    dpp::snowflake result = 0;
+    const char* sql = "SELECT modlog_channel_id FROM server_settings WHERE guild_id = ? LIMIT 1;";
+
+    if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) == SQLITE_OK) {
+        sqlite3_bind_int64(stmt, 1, guild_id);
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            result = static_cast<dpp::snowflake>(sqlite3_column_int64(stmt, 0));
+        }
+    }
+
+    sqlite3_finalize(stmt);
+    return result;
+}
+
+Database& ModerationManager::get_db() {
+    static Database instance("db/master.db");
+    return instance;
+}
+
+bool ModerationManager::init() {
+    const char* sql =
+        "CREATE TABLE IF NOT EXISTS moderation_cases ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "guild_id INTEGER NOT NULL,"
+        "target_id INTEGER NOT NULL,"
+        "actor_id INTEGER NOT NULL,"
+        "action TEXT NOT NULL,"
+        "reason TEXT,"
+        "duration_seconds INTEGER DEFAULT 0,"
+        "created_at INTEGER DEFAULT 0"
+        ");";
+
+    return get_db().execute(sql);
+}
+
+std::optional<int> ModerationManager::create_case(
+    dpp::snowflake guild_id,
+    dpp::snowflake target_id,
+    dpp::snowflake actor_id,
+    const std::string& action,
+    const std::string& reason,
+    int duration_seconds
+) {
+    if (!init() || !guild_id || !target_id || !actor_id || action.empty()) {
+        return std::nullopt;
+    }
+
+    sqlite3_stmt* stmt;
+    const char* sql =
+        "INSERT INTO moderation_cases "
+        "(guild_id, target_id, actor_id, action, reason, duration_seconds, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?);";
+
+    if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        return std::nullopt;
+    }
+
+    sqlite3_bind_int64(stmt, 1, guild_id);
+    sqlite3_bind_int64(stmt, 2, target_id);
+    sqlite3_bind_int64(stmt, 3, actor_id);
+    sqlite3_bind_text(stmt, 4, action.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 5, reason.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(stmt, 6, duration_seconds);
+    sqlite3_bind_int(stmt, 7, static_cast<int>(time(nullptr)));
+
+    const bool success = sqlite3_step(stmt) == SQLITE_DONE;
+    sqlite3_finalize(stmt);
+    if (!success) {
+        return std::nullopt;
+    }
+
+    return static_cast<int>(sqlite3_last_insert_rowid(get_db().get_handle()));
+}
+
+std::vector<ModerationCase> ModerationManager::list_cases(dpp::snowflake guild_id, dpp::snowflake target_id, int limit) {
+    std::vector<ModerationCase> result;
+    if (!init() || !guild_id || !target_id) {
+        return result;
+    }
+
+    sqlite3_stmt* stmt;
+    const char* sql =
+        "SELECT id, guild_id, target_id, actor_id, action, reason, duration_seconds, created_at "
+        "FROM moderation_cases "
+        "WHERE guild_id = ? AND target_id = ? "
+        "ORDER BY id DESC LIMIT ?;";
+
+    if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        return result;
+    }
+
+    sqlite3_bind_int64(stmt, 1, guild_id);
+    sqlite3_bind_int64(stmt, 2, target_id);
+    sqlite3_bind_int(stmt, 3, limit <= 0 ? 10 : limit);
+
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        ModerationCase entry;
+        entry.id = sqlite3_column_int(stmt, 0);
+        entry.guild_id = static_cast<dpp::snowflake>(sqlite3_column_int64(stmt, 1));
+        entry.target_id = static_cast<dpp::snowflake>(sqlite3_column_int64(stmt, 2));
+        entry.actor_id = static_cast<dpp::snowflake>(sqlite3_column_int64(stmt, 3));
+        const unsigned char* action = sqlite3_column_text(stmt, 4);
+        const unsigned char* reason = sqlite3_column_text(stmt, 5);
+        entry.action = action ? reinterpret_cast<const char*>(action) : "";
+        entry.reason = reason ? reinterpret_cast<const char*>(reason) : "";
+        entry.duration_seconds = sqlite3_column_int(stmt, 6);
+        entry.created_at = sqlite3_column_int(stmt, 7);
+        result.push_back(entry);
     }
 
     sqlite3_finalize(stmt);
