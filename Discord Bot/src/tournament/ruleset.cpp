@@ -1,64 +1,11 @@
+#include "core/sqlite.hpp"
 #include "tournament/ruleset.hpp"
-#include <filesystem>
-#include <iostream>
 #include <sstream>
 #include <sqlite3.h>
 
 namespace {
-	class RulesetDatabase {
-	public:
-		RulesetDatabase() {
-			std::filesystem::path path("db/master.db");
-			if (path.has_parent_path() && !std::filesystem::exists(path.parent_path())) {
-				std::filesystem::create_directories(path.parent_path());
-			}
-
-			if (sqlite3_open(path.string().c_str(), &db) != SQLITE_OK) {
-				std::cerr << "CRITICAL: SQLITE Open Failed: " << sqlite3_errmsg(db) << std::endl;
-				sqlite3_close(db);
-				db = nullptr;
-				return;
-			}
-
-			sqlite3_busy_timeout(db, 5000);
-			execute("PRAGMA foreign_keys = ON;");
-		}
-
-		~RulesetDatabase() {
-			if (db) {
-				sqlite3_close(db);
-			}
-		}
-
-		RulesetDatabase(const RulesetDatabase&) = delete;
-		RulesetDatabase& operator=(const RulesetDatabase&) = delete;
-
-		bool execute(const std::string& sql) {
-			if (!db) {
-				return false;
-			}
-
-			char* error = nullptr;
-			const int rc = sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &error);
-			if (rc != SQLITE_OK) {
-				std::cerr << "SQL Error: " << (error ? error : "unknown") << std::endl;
-				sqlite3_free(error);
-				return false;
-			}
-
-			return true;
-		}
-
-		sqlite3* handle() {
-			return db;
-		}
-
-	private:
-		sqlite3* db = nullptr;
-	};
-
-	RulesetDatabase& get_db() {
-		static RulesetDatabase instance;
+	Database& get_db() {
+		static Database instance("db/master.db");
 		return instance;
 	}
 
@@ -176,7 +123,13 @@ bool tournament_ruleset::init() {
 		"FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE"
 		");";
 
-	return get_db().execute(sql);
+	return get_db().execute(sql)
+		&& get_db().create_index_if_missing(
+			"idx_tournament_rulesets_tournament_scope",
+			"tournament_rulesets",
+			"tournament_id, scope"
+		)
+		&& get_db().set_schema_version(1);
 }
 
 bool tournament_ruleset::set_ruleset(const RulesetConfig& config) {
@@ -209,7 +162,7 @@ bool tournament_ruleset::set_ruleset(const RulesetConfig& config) {
 		"deuce_mode = excluded.deuce_mode,"
 		"allow_draw = excluded.allow_draw;";
 
-	if (sqlite3_prepare_v2(get_db().handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+	if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
 		return false;
 	}
 
@@ -238,7 +191,7 @@ bool tournament_ruleset::clear_secondary_ruleset(int tournament_id) {
 		"DELETE FROM tournament_rulesets "
 		"WHERE tournament_id = ? AND scope = 'secondary';";
 
-	if (sqlite3_prepare_v2(get_db().handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+	if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
 		return false;
 	}
 
@@ -263,7 +216,7 @@ std::optional<tournament_ruleset::RulesetConfig> tournament_ruleset::get_ruleset
 		"WHERE tournament_id = ? AND scope = ? "
 		"LIMIT 1;";
 
-	if (sqlite3_prepare_v2(get_db().handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+	if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
 		return std::nullopt;
 	}
 

@@ -69,6 +69,23 @@ namespace {
 		return reason.empty() ? "No reason provided." : reason;
 	}
 
+	std::string neutralise_mass_mentions(std::string value) {
+		const std::pair<std::string, std::string> replacements[] = {
+			{ "@everyone", "@ everyone" },
+			{ "@here", "@ here" }
+		};
+
+		for (const auto& [needle, replacement] : replacements) {
+			size_t pos = 0;
+			while ((pos = value.find(needle, pos)) != std::string::npos) {
+				value.replace(pos, needle.size(), replacement);
+				pos += replacement.size();
+			}
+		}
+
+		return value;
+	}
+
 	bool invalid_target(const dpp::slashcommand_t& event, dpp::snowflake target_id) {
 		return !event.command.guild_id
 			|| !target_id
@@ -87,7 +104,7 @@ namespace {
 			.add_field("Action", action, true)
 			.add_field("Target", "<@" + std::to_string(target_id) + ">", true)
 			.add_field("Moderator", "<@" + std::to_string(event.command.usr.id) + ">", true)
-			.add_field("Reason", reason, false)
+			.add_field("Reason", neutralise_mass_mentions(reason), false)
 			.set_timestamp(time(nullptr));
 
 		if (duration > 0) {
@@ -98,7 +115,14 @@ namespace {
 	}
 
 	std::optional<int> create_and_log(dpp::cluster& bot, const dpp::slashcommand_t& event, dpp::snowflake target_id, const std::string& action, const std::string& reason, int duration = 0) {
-		auto case_id = ModerationManager::create_case(event.command.guild_id, target_id, event.command.usr.id, action, reason, duration);
+		auto case_id = ModerationManager::create_case(
+			event.command.guild_id,
+			target_id,
+			event.command.usr.id,
+			action,
+			neutralise_mass_mentions(reason),
+			duration
+		);
 		if (case_id) {
 			log_case(bot, event, *case_id, target_id, action, reason, duration);
 		}
@@ -109,18 +133,18 @@ namespace {
 		if (!is_mod(event)) return reply_ephemeral(event, "You need moderator permission to warn users.");
 		const dpp::snowflake target_id = get_snowflake_option(subcommand, "user");
 		if (invalid_target(event, target_id)) return reply_ephemeral(event, "Invalid moderation target.");
-		const std::string reason = default_reason(get_string_option(subcommand, "reason"));
+		const std::string reason = neutralise_mass_mentions(default_reason(get_string_option(subcommand, "reason")));
 		auto case_id = create_and_log(bot, event, target_id, "warn", reason);
-		event.reply(case_id ? "Warning recorded as case `" + std::to_string(*case_id) + "`." : "Could not record warning.");
+		event.reply(dpp::message(case_id ? "Warning recorded as case `" + std::to_string(*case_id) + "`." : "Could not record warning.").set_flags(dpp::m_ephemeral));
 	}
 
 	void handle_note(dpp::cluster& bot, const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
 		if (!is_mod(event)) return reply_ephemeral(event, "You need moderator permission to add notes.");
 		const dpp::snowflake target_id = get_snowflake_option(subcommand, "user");
 		if (invalid_target(event, target_id)) return reply_ephemeral(event, "Invalid moderation target.");
-		const std::string note = default_reason(get_string_option(subcommand, "note"));
+		const std::string note = neutralise_mass_mentions(default_reason(get_string_option(subcommand, "note")));
 		auto case_id = create_and_log(bot, event, target_id, "note", note);
-		event.reply(case_id ? "Note recorded as case `" + std::to_string(*case_id) + "`." : "Could not record note.");
+		event.reply(dpp::message(case_id ? "Note recorded as case `" + std::to_string(*case_id) + "`." : "Could not record note.").set_flags(dpp::m_ephemeral));
 	}
 
 	void handle_history(const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
@@ -129,14 +153,14 @@ namespace {
 		if (!target_id) return reply_ephemeral(event, "Choose a user.");
 
 		const auto cases = ModerationManager::list_cases(event.command.guild_id, target_id, 10);
-		if (cases.empty()) return event.reply("No moderation history found for <@" + std::to_string(target_id) + ">.");
+		if (cases.empty()) return event.reply(dpp::message("No moderation history found for <@" + std::to_string(target_id) + ">.").set_flags(dpp::m_ephemeral));
 
 		std::ostringstream out;
 		out << "Moderation history for <@" << target_id << ">:\n";
 		for (const auto& entry : cases) {
-			out << "- #" << entry.id << " `" << entry.action << "` by <@" << entry.actor_id << ">: " << entry.reason << "\n";
+			out << "- #" << entry.id << " `" << entry.action << "` by <@" << entry.actor_id << ">: " << neutralise_mass_mentions(entry.reason) << "\n";
 		}
-		event.reply(out.str());
+		event.reply(dpp::message(out.str()).set_flags(dpp::m_ephemeral));
 	}
 
 	void live_action_callback(dpp::cluster& bot, const dpp::slashcommand_t& event, dpp::snowflake target_id, const std::string& action, const std::string& reason, int duration = 0) {

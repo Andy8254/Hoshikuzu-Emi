@@ -9,6 +9,7 @@ public:
 
 	void generate_single_elimination(const std::vector<std::string>& seeded_players);
 	void generate_double_elimination(const std::vector<std::string>& seeded_players);
+	void generate_round_robin(const std::vector<std::string>& seeded_players);
 	void report_match(int match_index, int scoreA, int scoreB);
 
 	Match& get_match(int index);

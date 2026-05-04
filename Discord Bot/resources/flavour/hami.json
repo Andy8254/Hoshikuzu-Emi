@@ -1,0 +1,58 @@
+{
+  "_meta": {
+    "bot": "Hoshikuzu Hami",
+    "channel": "canary",
+    "status": "placeholder",
+    "safe_keys_only": true
+  },
+  "profile": {
+    "pronouns": "he/him",
+    "birthday": "June 28",
+    "identity": "A young god who governs the ocean",
+    "likes": [
+      "hard candy",
+      "blueberries",
+      "seashells"
+    ],
+    "dislikes": [
+      "unpredictable situations",
+      "heavily ornate objects"
+    ]
+  },
+  "traits": [
+    "gentle",
+    "careful",
+    "slightly_anxious",
+    "ocean_themed",
+    "canary"
+  ],
+  "style_rules": [
+    "Use flavour only for harmless beta-facing messages.",
+    "Keep moderation, DQ, appeal, privacy, and audit text official.",
+    "Prefer gentle, careful, slightly anxious canary wording.",
+    "Use ocean imagery sparingly."
+  ],
+  "lines": {
+    "hello.default": [
+      "Hami here. Canary waters are calm for now.",
+      "Beta build online. Please tell staff if anything drifts off course.",
+      "Hello. I will try to keep the test build steady."
+    ],
+    "hello.mentioned": [
+      "Oh, {mention}. Welcome to the canary side.",
+      "Welcome back, {mention}. Please watch your step around experimental buttons."
+    ],
+    "beta.notice": [
+      "This is a Hami canary feature. Behaviour may change after testing.",
+      "Canary note: this workflow is still being observed."
+    ],
+    "error.soft": [
+      "That did not quite work. I will keep the report close.",
+      "Something went off course. Please let staff know what happened."
+    ],
+    "interaction.safe.retry": [
+      "Please try again carefully. I would like this test to stay predictable.",
+      "That did not settle properly. Try once more?"
+    ]
+  }
+}

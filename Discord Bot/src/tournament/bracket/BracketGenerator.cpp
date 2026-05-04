@@ -309,6 +309,47 @@ void Bracket::generate_double_elimination(const std::vector<std::string>& seeded
 	}
 }
 
+void Bracket::generate_round_robin(const std::vector<std::string>& seeded_players) {
+	matches.clear();
+	bracket_size = static_cast<int>(seeded_players.size());
+	rounds = bracket_size % 2 == 0 ? bracket_size - 1 : bracket_size;
+
+	if (bracket_size <= 1) {
+		return;
+	}
+
+	std::vector<std::string> players = seeded_players;
+	if (players.size() % 2 != 0) {
+		players.push_back("");
+	}
+
+	const int player_count = static_cast<int>(players.size());
+	const int matches_per_round = player_count / 2;
+
+	for (int round = 0; round < player_count - 1; ++round) {
+		for (int pos = 0; pos < matches_per_round; ++pos) {
+			const std::string& a = players[pos];
+			const std::string& b = players[player_count - 1 - pos];
+			if (a.empty() || b.empty()) {
+				continue;
+			}
+
+			Match match;
+			match.bracket = "round_robin";
+			match.round = round;
+			match.position = pos;
+			match.playerA_id = a;
+			match.playerB_id = b;
+			match.state = MatchState::Ongoing;
+			match.next_winner_match = DEST_NONE;
+			match.next_loser_match = DEST_NONE;
+			matches.push_back(match);
+		}
+
+		std::rotate(players.begin() + 1, players.end() - 1, players.end());
+	}
+}
+
 void Bracket::report_match(int match_index, int scoreA, int scoreB) {
 	Match& match = matches.at(match_index);
 

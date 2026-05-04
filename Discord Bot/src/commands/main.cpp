@@ -25,12 +25,24 @@ namespace {
             .add_choice(dpp::command_option_choice("Other", "other"));
     }
 
-    dpp::command_option& add_format_choices(dpp::command_option& option) {
+            dpp::command_option& add_format_choices(dpp::command_option& option) {
         return option
             .add_choice(dpp::command_option_choice("Single elimination", "single_elimination"))
             .add_choice(dpp::command_option_choice("Double elimination", "double_elimination"))
             .add_choice(dpp::command_option_choice("Round robin", "round_robin")) //to be implemented in BETA
             .add_choice(dpp::command_option_choice("Swiss", "swiss")); //to be implemented in BETA
+    }
+
+    dpp::command_option& add_language_choices(dpp::command_option& option, bool include_none = false) {
+        option
+            .add_choice(dpp::command_option_choice("English (GB)", "EN-gb"))
+            .add_choice(dpp::command_option_choice("Korean", "KO-kr"));
+
+        if (include_none) {
+            option.add_choice(dpp::command_option_choice("None", "none"));
+        }
+
+        return option;
     }
 
     std::vector<std::string> split_custom_id(const std::string& value) {
@@ -212,6 +224,11 @@ int main() {
                 .add_choice(dpp::command_option_choice("Other", "other_id"))
             );
             bot.global_command_create(unlink_p);
+
+            dpp::slashcommand language("language", "Set your personal language preference", app_id);
+            dpp::command_option user_language(dpp::co_string, "language", "Language, or none to use the server default", true);
+            language.add_option(add_language_choices(user_language, true));
+            bot.global_command_create(language);
             
             dpp::slashcommand tetrio_cmd("tetrio", "Show a TETR.IO profile", app_id);
             tetrio_cmd.add_option(
@@ -242,10 +259,15 @@ int main() {
             settings_set_staff.add_option(dpp::command_option(dpp::co_role, "role", "Server staff role", true));
             settings.add_option(settings_set_staff);
 
-            dpp::command_option settings_language(dpp::co_sub_command, "language", "Set server language placeholder");
-            settings_language.add_option(dpp::command_option(dpp::co_string, "language", "Language", false)
-                .add_choice(dpp::command_option_choice("English (GB)", "EN-gb")));
+            dpp::command_option settings_language(dpp::co_sub_command, "language", "Set server primary language");
+            dpp::command_option settings_language_value(dpp::co_string, "language", "Language", true);
+            settings_language.add_option(add_language_choices(settings_language_value));
             settings.add_option(settings_language);
+
+            dpp::command_option settings_secondary_language(dpp::co_sub_command, "secondary_language", "Set server secondary language");
+            dpp::command_option settings_secondary_language_value(dpp::co_string, "language", "Language, or none to disable", true);
+            settings_secondary_language.add_option(add_language_choices(settings_secondary_language_value, true));
+            settings.add_option(settings_secondary_language);
 
             dpp::command_option settings_modlog_set(dpp::co_sub_command, "modlog_set", "Set moderation log channel");
             settings_modlog_set.add_option(dpp::command_option(dpp::co_channel, "channel", "Moderation log channel", true));
@@ -452,6 +474,10 @@ int main() {
             dpp::command_option stream_list(dpp::co_sub_command, "stream_list", "Show streamed matches");
             stream_list.add_option(dpp::command_option(dpp::co_integer, "id", "Tournament ID", true));
             bracket.add_option(stream_list);
+
+            dpp::command_option standings(dpp::co_sub_command, "standings", "Show Swiss or round-robin standings");
+            standings.add_option(dpp::command_option(dpp::co_integer, "id", "Tournament ID", true));
+            bracket.add_option(standings);
 
             dpp::command_option bracket_svg(dpp::co_sub_command, "svg", "Export the bracket as SVG");
             bracket_svg.add_option(dpp::command_option(dpp::co_integer, "id", "Tournament ID", true));

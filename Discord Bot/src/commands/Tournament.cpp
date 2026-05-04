@@ -1,4 +1,5 @@
 #include "core/CommandRegistry.hpp"
+#include "core/Localization.hpp"
 #include "core/security/PermissionManager.hpp"
 #include "core/sqlite.hpp"
 #include "tournament/bracket/MatchStore.hpp"
@@ -148,6 +149,23 @@ namespace {
 		return value ? "Yes" : "No";
 	}
 
+	std::string neutralise_mass_mentions(std::string value) {
+		const std::pair<std::string, std::string> replacements[] = {
+			{ "@everyone", "@ everyone" },
+			{ "@here", "@ here" }
+		};
+
+		for (const auto& [needle, replacement] : replacements) {
+			size_t pos = 0;
+			while ((pos = value.find(needle, pos)) != std::string::npos) {
+				value.replace(pos, needle.size(), replacement);
+				pos += replacement.size();
+			}
+		}
+
+		return value;
+	}
+
 	bool require_manage(const dpp::slashcommand_t& event) {
 		if (PermissionManager::can_manage_tournament(event)) {
 			return true;
@@ -219,6 +237,42 @@ namespace {
 		std::ostringstream out;
 		for (const auto& match : matches) {
 			out << "- " << tournament_bracket::describe_match(match) << "\n";
+		}
+
+		std::string result = out.str();
+		if (result.size() > 1800) {
+			result.resize(1800);
+			result += "\n...";
+		}
+
+		return result;
+	}
+
+	std::string standings_summary(
+		dpp::snowflake guild_id,
+		int tournament_id,
+		const std::vector<tournament_bracket::FormatStanding>& standings
+	) {
+		if (standings.empty()) {
+			return localization::guild_text(guild_id, "tournament.standings.empty");
+		}
+
+		std::ostringstream out;
+		out << localization::guild_text(
+			guild_id,
+			"tournament.standings.title",
+			{ { "tournament_id", std::to_string(tournament_id) } }
+		) << "\n";
+
+		int rank = 1;
+		for (const auto& standing : standings) {
+			out << rank++ << ". " << tournament_bracket::player_mention(standing.player_id)
+				<< " - " << standing.points << " pt"
+				<< " (" << standing.wins << "-" << standing.losses;
+			if (standing.byes > 0) {
+				out << ", " << standing.byes << " bye";
+			}
+			out << ")\n";
 		}
 
 		std::string result = out.str();
@@ -474,7 +528,7 @@ namespace {
 				event,
 				"Tournament Registration",
 				"Tournament `" + std::to_string(tournament_id) + "`: <@" + std::to_string(effective_user_id) +
-				"> registered as `" + username + "`.",
+				"> registered as `" + neutralise_mass_mentions(username) + "`.",
 				0x5f9ea0
 			);
 		}
@@ -626,8 +680,16 @@ namespace {
 			generated = tournament_bracket::generate_double_elimination(tournament_id);
 			label = "Double-elimination";
 		}
+		else if (type == "round_robin") {
+			generated = tournament_bracket::generate_round_robin(tournament_id);
+			label = "Round-robin";
+		}
+		else if (type == "swiss") {
+			generated = tournament_bracket::generate_swiss_round(tournament_id);
+			label = "Swiss round";
+		}
 		else if (type != "single_elimination") {
-			edit_logged(event, "Bracket generation is currently available for single and double elimination only.");
+			edit_logged(event, localization::guild_text(event.command.guild_id, "tournament.generate.unknown"));
 			return;
 		}
 		else {
@@ -635,11 +697,21 @@ namespace {
 		}
 
 		if (!generated) {
-			edit_logged(event, "Could not generate a bracket. Make sure at least two players are checked in.");
+			edit_logged(event, localization::guild_text(event.command.guild_id, "tournament.generate.failed"));
 			return;
 		}
 
-		edit_logged(event, label + " bracket generated for tournament `" + std::to_string(tournament_id) + "`.");
+		edit_logged(
+			event,
+			localization::guild_text(
+				event.command.guild_id,
+				"tournament.generate.ok",
+				{
+					{ "format", label },
+					{ "tournament_id", std::to_string(tournament_id) }
+				}
+			)
+		);
 	}
 
 	void handle_matches_current(const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
@@ -730,7 +802,7 @@ namespace {
 		const int tournament_id = get_int_option(subcommand, "id");
 		const int match_id = get_int_option(subcommand, "match_id");
 		const dpp::snowflake player_id = get_snowflake_option(subcommand, "player");
-		const std::string reason = get_string_option(subcommand, "reason", "forfeit");
+		const std::string reason = neutralise_mass_mentions(get_string_option(subcommand, "reason", "forfeit"));
 
 		if (!tournament_bracket::forfeit_player(tournament_id, match_id, std::to_string(player_id), reason)) {
 			edit_logged(event, "Could not forfeit that player. Make sure the match is ready/current and the selected user is in it.");
@@ -773,7 +845,7 @@ namespace {
 
 		const int tournament_id = get_int_option(subcommand, "id");
 		const int match_id = get_int_option(subcommand, "match_id");
-		const std::string reason = get_string_option(subcommand, "reason", "Staff requested.");
+		const std::string reason = neutralise_mass_mentions(get_string_option(subcommand, "reason", "Staff requested."));
 		auto match = tournament_bracket::get_match(tournament_id, match_id);
 		if (!match) {
 			edit_ephemeral(event, "Match not found.");
@@ -830,6 +902,20 @@ namespace {
 		event.thinking(false);
 		const int tournament_id = get_int_option(subcommand, "id");
 		edit_logged(event, match_summary(tournament_bracket::list_streamed_matches(tournament_id)));
+	}
+
+	void handle_format_standings(const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
+		event.thinking(false);
+
+		const int tournament_id = get_int_option(subcommand, "id");
+		edit_logged(
+			event,
+			standings_summary(
+				event.command.guild_id,
+				tournament_id,
+				tournament_bracket::list_format_standings(tournament_id)
+			)
+		);
 	}
 
 	void handle_match_threads(
@@ -1244,6 +1330,7 @@ namespace {
 		if (subcommand.name == "stream_assign") return handle_stream_assign(event, subcommand);
 		if (subcommand.name == "stream_clear") return handle_stream_clear(event, subcommand);
 		if (subcommand.name == "stream_list") return handle_stream_list(event, subcommand);
+		if (subcommand.name == "standings") return handle_format_standings(event, subcommand);
 		if (subcommand.name == "svg") return handle_bracket_svg(event, subcommand);
 		if (subcommand.name == "match_svg") return handle_match_svg(event, subcommand);
 
@@ -1285,6 +1372,7 @@ void register_tournament_commands(dpp::cluster& bot) {
 		if (subcommand.name == "stream_assign") return handle_stream_assign(event, subcommand);
 		if (subcommand.name == "stream_clear") return handle_stream_clear(event, subcommand);
 		if (subcommand.name == "stream_list") return handle_stream_list(event, subcommand);
+		if (subcommand.name == "standings") return handle_format_standings(event, subcommand);
 		if (subcommand.name == "bracket_svg") return handle_bracket_svg(event, subcommand);
 		if (subcommand.name == "match_svg") return handle_match_svg(event, subcommand);
 		if (subcommand.name == "config") return handle_config(event, subcommand);

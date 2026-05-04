@@ -41,9 +41,20 @@ namespace tournament_bracket {
 		int next_loser_slot = -1;
 	};
 
+	struct FormatStanding {
+		std::string player_id;
+		int wins = 0;
+		int losses = 0;
+		int byes = 0;
+		int points = 0;
+		int seed = 0;
+	};
+
 	bool init();
 	bool generate_single_elimination(int tournament_id);
 	bool generate_double_elimination(int tournament_id);
+	bool generate_round_robin(int tournament_id);
+	bool generate_swiss_round(int tournament_id);
 	bool clear_matches(int tournament_id);
 
 	std::optional<StoredMatch> get_match(int tournament_id, int match_id);
@@ -51,6 +62,7 @@ namespace tournament_bracket {
 	std::vector<StoredMatch> list_current_matches(int tournament_id);
 	std::vector<StoredMatch> list_round_matches(int tournament_id, int round);
 	std::vector<StoredMatch> list_streamed_matches(int tournament_id);
+	std::vector<FormatStanding> list_format_standings(int tournament_id);
 
 	bool assign_streamed(int tournament_id, int match_id, bool streamed);
 	bool set_discord_thread(int tournament_id, int match_id, dpp::snowflake thread_id, dpp::snowflake message_id = 0);

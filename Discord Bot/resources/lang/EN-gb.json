@@ -1,0 +1,30 @@
+{
+  "_meta": {
+    "language": "EN-gb",
+    "status": "placeholder",
+    "notes": "Preliminary beta1 localization seed. Official messages should move here gradually."
+  },
+  "hello.default": "Hi there! Emi here!",
+  "hello.mentioned": "Welcome back, {mention}! How's your day today?",
+  "beta.notice": "This feature is still being tested.",
+  "error.soft": "That did not quite work. Please try again or contact staff.",
+  "moderation.case.recorded": "Case {case_id} has been recorded.",
+  "tournament.register.ok": "You are registered for tournament {tournament_id}.",
+  "tournament.checkin.ok": "You are checked in for tournament {tournament_id}.",
+  "settings.permission.staff": "You need server staff permission to view settings.",
+  "settings.permission.owner": "Only the server owner or bot developer can set the admin role.",
+  "settings.permission.admin": "You need server admin permission to change this setting.",
+  "settings.permission.moderator": "You need server moderator permission to change this setting.",
+  "settings.language.updated": "Language set to `{language}`.",
+  "settings.secondary_language.updated": "Secondary language set to `{language}`.",
+  "settings.secondary_language.cleared": "Secondary language disabled.",
+  "settings.language.unsupported": "That language is not available yet.",
+  "settings.unknown": "Unknown settings subcommand.",
+  "user.language.updated": "Your language preference is now `{language}`.",
+  "user.language.cleared": "Your language preference has been cleared.",
+  "tournament.generate.unknown": "Unknown bracket type.",
+  "tournament.generate.failed": "Could not generate matches. Make sure at least two players are checked in and any current Swiss round is complete.",
+  "tournament.generate.ok": "{format} matches generated for tournament `{tournament_id}`.",
+  "tournament.standings.empty": "No completed Swiss or round-robin matches found.",
+  "tournament.standings.title": "Standings for tournament `{tournament_id}`:"
+}

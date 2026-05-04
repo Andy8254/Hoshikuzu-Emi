@@ -19,8 +19,30 @@ public:
 	Database& operator=(const Database&) = delete;
 
 	bool execute(const std::string& sql);
+	bool table_has_column(const std::string& table, const std::string& column);
+	bool add_column_if_missing(const std::string& table, const std::string& column_definition);
+	bool create_index_if_missing(const std::string& index_name, const std::string& table, const std::string& columns);
+	bool set_schema_version(int version);
+	int get_schema_version();
 
 	sqlite3* get_handle() { return db; }
+};
+
+class DatabaseTransaction {
+private:
+	Database& db;
+	bool active = false;
+
+public:
+	explicit DatabaseTransaction(Database& database);
+	~DatabaseTransaction();
+
+	DatabaseTransaction(const DatabaseTransaction&) = delete;
+	DatabaseTransaction& operator=(const DatabaseTransaction&) = delete;
+
+	bool ok() const { return active; }
+	bool commit();
+	void rollback();
 };
 
 class PlayerManager {
@@ -85,10 +107,24 @@ public:
 
 	static bool set_language(dpp::snowflake guild_id, const std::string& language);
 	static std::string get_language(dpp::snowflake guild_id);
+	static bool set_secondary_language(dpp::snowflake guild_id, const std::string& language);
+	static bool clear_secondary_language(dpp::snowflake guild_id);
+	static std::string get_secondary_language(dpp::snowflake guild_id);
 
 	static bool set_modlog_channel(dpp::snowflake guild_id, dpp::snowflake channel_id);
 	static bool clear_modlog_channel(dpp::snowflake guild_id);
 	static dpp::snowflake get_modlog_channel(dpp::snowflake guild_id);
+	static Database& get_db();
+};
+
+class UserSettingsManager {
+public:
+	static bool init();
+	static bool set_language(dpp::snowflake user_id, const std::string& language);
+	static bool clear_language(dpp::snowflake user_id);
+	static std::string get_language(dpp::snowflake user_id);
+
+private:
 	static Database& get_db();
 };
 

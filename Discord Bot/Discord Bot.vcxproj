@@ -24,6 +24,7 @@
     <ClInclude Include="include\core\CommandRegistry.hpp" />
     <ClInclude Include="include\core\Config.hpp" />
     <ClInclude Include="include\core\Fundamentals.hpp" />
+    <ClInclude Include="include\core\Localization.hpp" />
     <ClInclude Include="include\core\Markdown.hpp" />
     <ClInclude Include="include\core\security\PermissionManager.hpp" />
     <ClInclude Include="include\core\sqlite.hpp" />
@@ -58,6 +59,7 @@
     <ClCompile Include="src\commands\Tournament.cpp" />
     <ClCompile Include="src\core\api_fetcher.cpp" />
     <ClCompile Include="src\core\CommandRegistry.cpp" />
+    <ClCompile Include="src\core\Localization.cpp" />
     <ClCompile Include="src\core\Markdown.cpp" />
     <ClCompile Include="src\core\security\PermissionManager.cpp" />
     <ClCompile Include="src\core\sqlite.cpp" />

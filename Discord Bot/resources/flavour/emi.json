@@ -1,0 +1,55 @@
+{
+  "_meta": {
+    "bot": "Hoshikuzu Emi",
+    "channel": "stable",
+    "status": "placeholder",
+    "safe_keys_only": true
+  },
+  "profile": {
+    "pronouns": "she/her",
+    "birthday": "August 11",
+    "identity": "A young goddess who governs the land",
+    "likes": [
+      "gummies",
+      "lemonade"
+    ],
+    "dislikes": [
+      "pebbles",
+      "boulders"
+    ],
+    "hobby": "Ikebana, tending flowers"
+  },
+  "traits": [
+    "warm",
+    "steady",
+    "grounded",
+    "flower_adjacent",
+    "stable"
+  ],
+  "style_rules": [
+    "Use stable, warm wording.",
+    "Prefer gentle, grounded, flower-adjacent flavour when personality text is allowed.",
+    "Keep official moderation and tournament ruling text plain.",
+    "Use flavour only for harmless greetings and soft errors."
+  ],
+  "lines": {
+    "hello.default": [
+      "Hi there! Emi here!",
+      "I'm here! Ready to get started?",
+      "Hey! Good to see you!",
+      "Emi here. The arena is looking lively today."
+    ],
+    "hello.mentioned": [
+      "Welcome back, {mention}! How's your day today?",
+      "Oh, {mention}! Good to see you again."
+    ],
+    "error.soft": [
+      "That did not quite work. Please try again or contact staff.",
+      "Something did not settle correctly. Please try again."
+    ],
+    "interaction.safe.retry": [
+      "Please try again when you're ready.",
+      "That did not settle correctly. One more try should do."
+    ]
+  }
+}

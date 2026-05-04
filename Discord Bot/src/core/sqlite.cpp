@@ -1,4 +1,5 @@
 #include "core/sqlite.hpp"
+#include <cstdlib>
 #include <iostream>
 #include <ctime>
 #include <unordered_set>
@@ -8,22 +9,41 @@ static const std::vector<std::string> allowed = {
     "tetra_id", "tgm_id", "ctwc_id", "other_id"
 };
 
+namespace {
+    std::string resolve_db_path(const std::string& db_path) {
+        char* override_path = nullptr;
+        size_t override_size = 0;
+        const errno_t rc = _dupenv_s(&override_path, &override_size, "BOT_DB_PATH");
+        std::string result = db_path;
+
+        if (rc == 0 && override_path && *override_path && db_path == "db/master.db") {
+            result = override_path;
+        }
+
+        free(override_path);
+        return result;
+    }
+}
+
 Database::Database(const std::string& db_path) {
     //Ensure root/db directory exists
-    std::filesystem::path p(db_path);
+    const std::string resolved_db_path = resolve_db_path(db_path);
+    std::filesystem::path p(resolved_db_path);
     if (p.has_parent_path() && !std::filesystem::exists(p.parent_path())) {
         std::filesystem::create_directories(p.parent_path());
     }
 
     //Open Connection
-    if (sqlite3_open(db_path.c_str(), &db) != SQLITE_OK) {
+    if (sqlite3_open(resolved_db_path.c_str(), &db) != SQLITE_OK) {
         std::cerr << "CRITICAL: SQLITE Open Failed: " << sqlite3_errmsg(db) << std::endl;
         db = nullptr;
     }
     else {
-        //Enable Foreign Keys for ON DELETE CASCADE
-        execute("PRAGMA foreign_keys = ON;");
         sqlite3_busy_timeout(db, 5000);
+        execute("PRAGMA foreign_keys = ON;");
+        execute("PRAGMA journal_mode = WAL;");
+        execute("PRAGMA synchronous = NORMAL;");
+        execute("PRAGMA temp_store = MEMORY;");
 
         //Initialize Master Schema
         std::string master_schema =
@@ -281,24 +301,159 @@ bool GuildConfigManager::init() {
     }
 
     const char* migrations[] = {
-        "ALTER TABLE guild_config ADD COLUMN tournament_channel_id INTEGER;",
-        "ALTER TABLE guild_config ADD COLUMN tournament_log_channel_id INTEGER;"
+        "tournament_channel_id INTEGER",
+        "tournament_log_channel_id INTEGER"
     };
 
     for (const char* migration : migrations) {
-        char* error = nullptr;
-        const int rc = sqlite3_exec(get_db().get_handle(), migration, nullptr, nullptr, &error);
+        if (!get_db().add_column_if_missing("guild_config", migration)) {
+            return false;
+        }
+    }
 
-        if (rc != SQLITE_OK) {
-            const std::string message = error ? error : "";
-            sqlite3_free(error);
-            if (message.find("duplicate column name") == std::string::npos) {
-                return false;
+    return get_db().set_schema_version(1);
+}
+
+bool Database::table_has_column(const std::string& table, const std::string& column) {
+    if (!db || table.empty() || column.empty()) {
+        return false;
+    }
+
+    sqlite3_stmt* stmt = nullptr;
+    const std::string sql = "PRAGMA table_info(" + table + ");";
+    if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+        return false;
+    }
+
+    bool found = false;
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        const unsigned char* value = sqlite3_column_text(stmt, 1);
+        if (value && column == reinterpret_cast<const char*>(value)) {
+            found = true;
+            break;
+        }
+    }
+
+    sqlite3_finalize(stmt);
+    return found;
+}
+
+bool Database::add_column_if_missing(const std::string& table, const std::string& column_definition) {
+    if (!db || table.empty() || column_definition.empty()) {
+        return false;
+    }
+
+    const size_t name_end = column_definition.find_first_of(" \t");
+    const std::string column = name_end == std::string::npos
+        ? column_definition
+        : column_definition.substr(0, name_end);
+
+    if (table_has_column(table, column)) {
+        return true;
+    }
+
+    return execute("ALTER TABLE " + table + " ADD COLUMN " + column_definition + ";");
+}
+
+bool Database::create_index_if_missing(const std::string& index_name, const std::string& table, const std::string& columns) {
+    if (!db || index_name.empty() || table.empty() || columns.empty()) {
+        return false;
+    }
+
+    return execute("CREATE INDEX IF NOT EXISTS " + index_name + " ON " + table + " (" + columns + ");");
+}
+
+bool Database::set_schema_version(int version) {
+    if (!db || version < 0) {
+        return false;
+    }
+
+    if (!execute(
+        "CREATE TABLE IF NOT EXISTS schema_meta ("
+        "key TEXT PRIMARY KEY,"
+        "value TEXT NOT NULL"
+        ");"
+    )) {
+        return false;
+    }
+
+    sqlite3_stmt* stmt = nullptr;
+    const char* sql =
+        "INSERT INTO schema_meta (key, value) "
+        "VALUES ('schema_version', ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value;";
+
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        return false;
+    }
+
+    const std::string value = std::to_string(version);
+    sqlite3_bind_text(stmt, 1, value.c_str(), -1, SQLITE_TRANSIENT);
+    const bool success = sqlite3_step(stmt) == SQLITE_DONE;
+    sqlite3_finalize(stmt);
+    return success;
+}
+
+int Database::get_schema_version() {
+    if (!db) {
+        return 0;
+    }
+
+    if (!execute(
+        "CREATE TABLE IF NOT EXISTS schema_meta ("
+        "key TEXT PRIMARY KEY,"
+        "value TEXT NOT NULL"
+        ");"
+    )) {
+        return 0;
+    }
+
+    sqlite3_stmt* stmt = nullptr;
+    int result = 0;
+    const char* sql = "SELECT value FROM schema_meta WHERE key = 'schema_version' LIMIT 1;";
+
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) == SQLITE_OK) {
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            const unsigned char* value = sqlite3_column_text(stmt, 0);
+            if (value) {
+                result = std::atoi(reinterpret_cast<const char*>(value));
             }
         }
     }
 
+    sqlite3_finalize(stmt);
+    return result;
+}
+
+DatabaseTransaction::DatabaseTransaction(Database& database)
+    : db(database),
+    active(database.execute("BEGIN TRANSACTION;")) {
+}
+
+DatabaseTransaction::~DatabaseTransaction() {
+    if (active) {
+        db.execute("ROLLBACK;");
+    }
+}
+
+bool DatabaseTransaction::commit() {
+    if (!active) {
+        return false;
+    }
+
+    if (!db.execute("COMMIT;")) {
+        return false;
+    }
+
+    active = false;
     return true;
+}
+
+void DatabaseTransaction::rollback() {
+    if (active) {
+        db.execute("ROLLBACK;");
+        active = false;
+    }
 }
 
 bool GuildConfigManager::set_staff_role(dpp::snowflake guild_id, dpp::snowflake role_id) {
@@ -567,6 +722,7 @@ bool ServerSettingsManager::init() {
         "moderator_role_id INTEGER,"
         "staff_role_id INTEGER,"
         "language TEXT DEFAULT 'EN-gb',"
+        "secondary_language TEXT DEFAULT '',"
         "modlog_channel_id INTEGER"
         ");";
 
@@ -575,27 +731,23 @@ bool ServerSettingsManager::init() {
     }
 
     const char* migrations[] = {
-        "ALTER TABLE server_settings ADD COLUMN owner_id INTEGER;",
-        "ALTER TABLE server_settings ADD COLUMN admin_role_id INTEGER;",
-        "ALTER TABLE server_settings ADD COLUMN moderator_role_id INTEGER;",
-        "ALTER TABLE server_settings ADD COLUMN staff_role_id INTEGER;",
-        "ALTER TABLE server_settings ADD COLUMN language TEXT DEFAULT 'EN-gb';",
-        "ALTER TABLE server_settings ADD COLUMN modlog_channel_id INTEGER;"
+        "owner_id INTEGER",
+        "admin_role_id INTEGER",
+        "moderator_role_id INTEGER",
+        "staff_role_id INTEGER",
+        "language TEXT DEFAULT 'EN-gb'",
+        "secondary_language TEXT DEFAULT ''",
+        "modlog_channel_id INTEGER"
     };
 
     for (const char* migration : migrations) {
-        char* error = nullptr;
-        const int rc = sqlite3_exec(get_db().get_handle(), migration, nullptr, nullptr, &error);
-        if (rc != SQLITE_OK) {
-            const std::string message = error ? error : "";
-            sqlite3_free(error);
-            if (message.find("duplicate column name") == std::string::npos) {
-                return false;
-            }
+        if (!get_db().add_column_if_missing("server_settings", migration)) {
+            return false;
         }
     }
 
-    return true;
+    return get_db().create_index_if_missing("idx_server_settings_language", "server_settings", "language")
+        && get_db().set_schema_version(1);
 }
 
 bool ServerSettingsManager::set_owner_if_empty(dpp::snowflake guild_id, dpp::snowflake owner_id) {
@@ -755,6 +907,72 @@ std::string ServerSettingsManager::get_language(dpp::snowflake guild_id) {
     return result;
 }
 
+bool ServerSettingsManager::set_secondary_language(dpp::snowflake guild_id, const std::string& language) {
+    if (!init() || !guild_id || language.empty()) {
+        return false;
+    }
+
+    sqlite3_stmt* stmt;
+    const char* sql =
+        "INSERT INTO server_settings (guild_id, secondary_language) "
+        "VALUES (?, ?) "
+        "ON CONFLICT(guild_id) DO UPDATE SET secondary_language = excluded.secondary_language;";
+
+    if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        return false;
+    }
+
+    sqlite3_bind_int64(stmt, 1, guild_id);
+    sqlite3_bind_text(stmt, 2, language.c_str(), -1, SQLITE_TRANSIENT);
+    const bool success = sqlite3_step(stmt) == SQLITE_DONE;
+    sqlite3_finalize(stmt);
+    return success;
+}
+
+bool ServerSettingsManager::clear_secondary_language(dpp::snowflake guild_id) {
+    if (!init() || !guild_id) {
+        return false;
+    }
+
+    sqlite3_stmt* stmt;
+    const char* sql =
+        "INSERT INTO server_settings (guild_id, secondary_language) "
+        "VALUES (?, '') "
+        "ON CONFLICT(guild_id) DO UPDATE SET secondary_language = '';";
+
+    if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        return false;
+    }
+
+    sqlite3_bind_int64(stmt, 1, guild_id);
+    const bool success = sqlite3_step(stmt) == SQLITE_DONE;
+    sqlite3_finalize(stmt);
+    return success;
+}
+
+std::string ServerSettingsManager::get_secondary_language(dpp::snowflake guild_id) {
+    if (!init()) {
+        return "";
+    }
+
+    sqlite3_stmt* stmt;
+    std::string result;
+    const char* sql = "SELECT secondary_language FROM server_settings WHERE guild_id = ? LIMIT 1;";
+
+    if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) == SQLITE_OK) {
+        sqlite3_bind_int64(stmt, 1, guild_id);
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            const unsigned char* value = sqlite3_column_text(stmt, 0);
+            if (value) {
+                result = reinterpret_cast<const char*>(value);
+            }
+        }
+    }
+
+    sqlite3_finalize(stmt);
+    return result;
+}
+
 bool ServerSettingsManager::set_modlog_channel(dpp::snowflake guild_id, dpp::snowflake channel_id) {
     if (!init() || !guild_id || !channel_id) {
         return false;
@@ -818,6 +1036,89 @@ dpp::snowflake ServerSettingsManager::get_modlog_channel(dpp::snowflake guild_id
     return result;
 }
 
+Database& UserSettingsManager::get_db() {
+    static Database instance("db/master.db");
+    return instance;
+}
+
+bool UserSettingsManager::init() {
+    const char* sql =
+        "CREATE TABLE IF NOT EXISTS user_settings ("
+        "user_id INTEGER PRIMARY KEY,"
+        "language TEXT DEFAULT ''"
+        ");";
+
+    return get_db().execute(sql)
+        && get_db().create_index_if_missing("idx_user_settings_language", "user_settings", "language")
+        && get_db().set_schema_version(1);
+}
+
+bool UserSettingsManager::set_language(dpp::snowflake user_id, const std::string& language) {
+    if (!init() || !user_id || language.empty()) {
+        return false;
+    }
+
+    sqlite3_stmt* stmt;
+    const char* sql =
+        "INSERT INTO user_settings (user_id, language) "
+        "VALUES (?, ?) "
+        "ON CONFLICT(user_id) DO UPDATE SET language = excluded.language;";
+
+    if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        return false;
+    }
+
+    sqlite3_bind_int64(stmt, 1, user_id);
+    sqlite3_bind_text(stmt, 2, language.c_str(), -1, SQLITE_TRANSIENT);
+    const bool success = sqlite3_step(stmt) == SQLITE_DONE;
+    sqlite3_finalize(stmt);
+    return success;
+}
+
+bool UserSettingsManager::clear_language(dpp::snowflake user_id) {
+    if (!init() || !user_id) {
+        return false;
+    }
+
+    sqlite3_stmt* stmt;
+    const char* sql =
+        "INSERT INTO user_settings (user_id, language) "
+        "VALUES (?, '') "
+        "ON CONFLICT(user_id) DO UPDATE SET language = '';";
+
+    if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        return false;
+    }
+
+    sqlite3_bind_int64(stmt, 1, user_id);
+    const bool success = sqlite3_step(stmt) == SQLITE_DONE;
+    sqlite3_finalize(stmt);
+    return success;
+}
+
+std::string UserSettingsManager::get_language(dpp::snowflake user_id) {
+    if (!init()) {
+        return "";
+    }
+
+    sqlite3_stmt* stmt;
+    std::string result;
+    const char* sql = "SELECT language FROM user_settings WHERE user_id = ? LIMIT 1;";
+
+    if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) == SQLITE_OK) {
+        sqlite3_bind_int64(stmt, 1, user_id);
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            const unsigned char* value = sqlite3_column_text(stmt, 0);
+            if (value) {
+                result = reinterpret_cast<const char*>(value);
+            }
+        }
+    }
+
+    sqlite3_finalize(stmt);
+    return result;
+}
+
 Database& ModerationManager::get_db() {
     static Database instance("db/master.db");
     return instance;
@@ -836,7 +1137,13 @@ bool ModerationManager::init() {
         "created_at INTEGER DEFAULT 0"
         ");";
 
-    return get_db().execute(sql);
+    return get_db().execute(sql)
+        && get_db().create_index_if_missing(
+            "idx_moderation_cases_guild_target_created",
+            "moderation_cases",
+            "guild_id, target_id, created_at"
+        )
+        && get_db().set_schema_version(1);
 }
 
 std::optional<int> ModerationManager::create_case(

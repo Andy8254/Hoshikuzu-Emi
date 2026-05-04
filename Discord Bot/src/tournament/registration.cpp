@@ -1,61 +1,12 @@
+#include "core/sqlite.hpp"
 #include "tournament/registration.hpp"
 #include <algorithm>
 #include <cctype>
-#include <filesystem>
-#include <iostream>
 #include <sqlite3.h>
 
 namespace {
-	class ParticipantDatabase {
-	public:
-		ParticipantDatabase() {
-			std::filesystem::path path("db/master.db");
-			if (path.has_parent_path() && !std::filesystem::exists(path.parent_path())) {
-				std::filesystem::create_directories(path.parent_path());
-			}
-
-			if (sqlite3_open(path.string().c_str(), &db) != SQLITE_OK) {
-				std::cerr << "CRITICAL: SQLITE Open Failed: " << sqlite3_errmsg(db) << std::endl;
-				sqlite3_close(db);
-				db = nullptr;
-				return;
-			}
-
-			sqlite3_busy_timeout(db, 5000);
-			execute("PRAGMA foreign_keys = ON;");
-		}
-
-		~ParticipantDatabase() {
-			if (db) sqlite3_close(db);
-		}
-
-		ParticipantDatabase(const ParticipantDatabase&) = delete;
-		ParticipantDatabase& operator=(const ParticipantDatabase&) = delete;
-
-		bool execute(const std::string& sql) {
-			if (!db) return false;
-
-			char* error = nullptr;
-			const int rc = sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &error);
-			if (rc != SQLITE_OK) {
-				std::cerr << "SQL Error: " << (error ? error : "unknown") << std::endl;
-				sqlite3_free(error);
-				return false;
-			}
-
-			return true;
-		}
-
-		sqlite3* handle() {
-			return db;
-		}
-
-	private:
-		sqlite3* db = nullptr;
-	};
-
-	ParticipantDatabase& get_db() {
-		static ParticipantDatabase instance;
+	Database& get_db() {
+		static Database instance("db/master.db");
 		return instance;
 	}
 
@@ -125,7 +76,18 @@ bool tournament_registration::init() {
 		"FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE"
 		");";
 
-	return get_db().execute(sql);
+	return get_db().execute(sql)
+		&& get_db().create_index_if_missing(
+			"idx_tournament_participants_tournament_status",
+			"tournament_participants",
+			"tournament_id, status"
+		)
+		&& get_db().create_index_if_missing(
+			"idx_tournament_participants_tournament_seed",
+			"tournament_participants",
+			"tournament_id, seed"
+		)
+		&& get_db().set_schema_version(1);
 }
 
 tournament_registration::ParticipantResult tournament_registration::register_player(const RegistrationRequest& request) {
@@ -158,7 +120,7 @@ tournament_registration::ParticipantResult tournament_registration::register_pla
 		"WHEN tournament_participants.status IN ('dropped', 'noshow') THEN 'registered' "
 		"ELSE tournament_participants.status END;";
 
-	if (sqlite3_prepare_v2(get_db().handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+	if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
 		return fail("Could not prepare registration.");
 	}
 
@@ -205,7 +167,7 @@ tournament_registration::ParticipantResult tournament_registration::unregister_p
 		"SET status = 'dropped' "
 		"WHERE tournament_id = ? AND discord_id = ?;";
 
-	if (sqlite3_prepare_v2(get_db().handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+	if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
 		return fail("Could not prepare unregister request.");
 	}
 
@@ -256,7 +218,7 @@ tournament_registration::ParticipantResult tournament_registration::check_in_pla
 		"SET status = ?, checked_in_at = ?, provided_username = ?, tetrio_id = ? "
 		"WHERE tournament_id = ? AND discord_id = ?;";
 
-	if (sqlite3_prepare_v2(get_db().handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+	if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
 		return fail("Could not prepare check-in.");
 	}
 
@@ -293,14 +255,14 @@ tournament_registration::ParticipantResult tournament_registration::undo_check_i
 		"SET status = 'registered', checked_in_at = 0 "
 		"WHERE tournament_id = ? AND discord_id = ?;";
 
-	if (sqlite3_prepare_v2(get_db().handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+	if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
 		return fail("Could not prepare check-in rollback.");
 	}
 
 	sqlite3_bind_int(stmt, 1, tournament_id);
 	bind_text(stmt, 2, discord_id);
 
-	const bool success = sqlite3_step(stmt) == SQLITE_DONE && sqlite3_changes(get_db().handle()) > 0;
+	const bool success = sqlite3_step(stmt) == SQLITE_DONE && sqlite3_changes(get_db().get_handle()) > 0;
 	sqlite3_finalize(stmt);
 
 	if (!success) {
@@ -322,7 +284,7 @@ bool tournament_registration::set_participant_seed(int tournament_id, const std:
 		"SET seed = ? "
 		"WHERE tournament_id = ? AND discord_id = ?;";
 
-	if (sqlite3_prepare_v2(get_db().handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+	if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
 		return false;
 	}
 
@@ -330,7 +292,7 @@ bool tournament_registration::set_participant_seed(int tournament_id, const std:
 	sqlite3_bind_int(stmt, 2, tournament_id);
 	bind_text(stmt, 3, discord_id);
 
-	const bool success = sqlite3_step(stmt) == SQLITE_DONE && sqlite3_changes(get_db().handle()) > 0;
+	const bool success = sqlite3_step(stmt) == SQLITE_DONE && sqlite3_changes(get_db().get_handle()) > 0;
 	sqlite3_finalize(stmt);
 	return success;
 }
@@ -350,7 +312,7 @@ bool tournament_registration::set_participant_status(
 		"SET status = ? "
 		"WHERE tournament_id = ? AND discord_id = ?;";
 
-	if (sqlite3_prepare_v2(get_db().handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+	if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
 		return false;
 	}
 
@@ -358,7 +320,7 @@ bool tournament_registration::set_participant_status(
 	sqlite3_bind_int(stmt, 2, tournament_id);
 	bind_text(stmt, 3, discord_id);
 
-	const bool success = sqlite3_step(stmt) == SQLITE_DONE && sqlite3_changes(get_db().handle()) > 0;
+	const bool success = sqlite3_step(stmt) == SQLITE_DONE && sqlite3_changes(get_db().get_handle()) > 0;
 	sqlite3_finalize(stmt);
 	return success;
 }
@@ -375,7 +337,7 @@ std::optional<tournament_registration::ParticipantRecord> tournament_registratio
 		"WHERE tournament_id = ? AND discord_id = ? "
 		"LIMIT 1;";
 
-	if (sqlite3_prepare_v2(get_db().handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+	if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
 		return std::nullopt;
 	}
 
@@ -404,7 +366,7 @@ std::vector<tournament_registration::ParticipantRecord> tournament_registration:
 		"WHERE tournament_id = ? "
 		"ORDER BY seed = 0, seed ASC, registered_at ASC;";
 
-	if (sqlite3_prepare_v2(get_db().handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+	if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
 		return result;
 	}
 

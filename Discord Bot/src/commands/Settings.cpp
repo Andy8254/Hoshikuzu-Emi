@@ -1,4 +1,5 @@
 #include "core/CommandRegistry.hpp"
+#include "core/Localization.hpp"
 #include "core/sqlite.hpp"
 #include <algorithm>
 #include <sstream>
@@ -70,7 +71,7 @@ namespace {
 
 	void handle_show(const dpp::slashcommand_t& event) {
 		if (!is_settings_moderator(event)) {
-			reply_ephemeral(event, "You need server staff permission to view settings.");
+			reply_ephemeral(event, localization::user_text(event.command.guild_id, event.command.usr.id, "settings.permission.staff"));
 			return;
 		}
 
@@ -81,6 +82,7 @@ namespace {
 			.add_field("Developer", "<@543676141177798676>", true)
 			.add_field("Owner", ServerSettingsManager::get_owner(guild_id) ? "<@" + std::to_string(ServerSettingsManager::get_owner(guild_id)) + ">" : "Not assigned", true)
 			.add_field("Language", ServerSettingsManager::get_language(guild_id), true)
+			.add_field("Secondary language", ServerSettingsManager::get_secondary_language(guild_id).empty() ? "None" : ServerSettingsManager::get_secondary_language(guild_id), true)
 			.add_field("Admin role", role_display(ServerSettingsManager::get_admin_role(guild_id)), true)
 			.add_field("Moderator role", role_display(ServerSettingsManager::get_moderator_role(guild_id)), true)
 			.add_field("Staff role", role_display(ServerSettingsManager::get_staff_role(guild_id)), true)
@@ -91,7 +93,7 @@ namespace {
 
 	void handle_set_admin_role(const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
 		if (!is_owner(event)) {
-			reply_ephemeral(event, "Only the server owner or bot developer can set the admin role.");
+			reply_ephemeral(event, localization::user_text(event.command.guild_id, event.command.usr.id, "settings.permission.owner"));
 			return;
 		}
 
@@ -106,7 +108,7 @@ namespace {
 
 	void handle_set_moderator_role(const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
 		if (!is_settings_admin(event)) {
-			reply_ephemeral(event, "You need server admin permission to set the moderator role.");
+			reply_ephemeral(event, localization::user_text(event.command.guild_id, event.command.usr.id, "settings.permission.admin"));
 			return;
 		}
 
@@ -121,7 +123,7 @@ namespace {
 
 	void handle_set_staff_role(const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
 		if (!is_settings_moderator(event)) {
-			reply_ephemeral(event, "You need server moderator permission to set the staff role.");
+			reply_ephemeral(event, localization::user_text(event.command.guild_id, event.command.usr.id, "settings.permission.moderator"));
 			return;
 		}
 
@@ -136,22 +138,57 @@ namespace {
 
 	void handle_language(const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
 		if (!is_settings_moderator(event)) {
-			reply_ephemeral(event, "You need server moderator permission to set the language.");
+			reply_ephemeral(event, localization::user_text(event.command.guild_id, event.command.usr.id, "settings.permission.moderator"));
 			return;
 		}
 
 		const std::string language = get_string_option(subcommand, "language", "EN-gb");
+		if (!localization::is_supported_language(language)) {
+			reply_ephemeral(event, localization::user_text(event.command.guild_id, event.command.usr.id, "settings.language.unsupported"));
+			return;
+		}
+
 		if (!ServerSettingsManager::set_language(event.command.guild_id, language)) {
 			reply_ephemeral(event, "Could not update the language.");
 			return;
 		}
 
-		event.reply("Language set to `" + language + "`. Localisation is not wired yet.");
+		event.reply(localization::message_text(event.command.guild_id, event.command.usr.id, "settings.language.updated", { { "language", language } }));
+	}
+
+	void handle_secondary_language(const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
+		if (!is_settings_moderator(event)) {
+			reply_ephemeral(event, localization::user_text(event.command.guild_id, event.command.usr.id, "settings.permission.moderator"));
+			return;
+		}
+
+		const std::string language = get_string_option(subcommand, "language", "none");
+		if (language == "none") {
+			if (!ServerSettingsManager::clear_secondary_language(event.command.guild_id)) {
+				reply_ephemeral(event, "Could not update the secondary language.");
+				return;
+			}
+
+			event.reply(localization::message_text(event.command.guild_id, event.command.usr.id, "settings.secondary_language.cleared"));
+			return;
+		}
+
+		if (!localization::is_supported_language(language)) {
+			reply_ephemeral(event, localization::user_text(event.command.guild_id, event.command.usr.id, "settings.language.unsupported"));
+			return;
+		}
+
+		if (!ServerSettingsManager::set_secondary_language(event.command.guild_id, language)) {
+			reply_ephemeral(event, "Could not update the secondary language.");
+			return;
+		}
+
+		event.reply(localization::message_text(event.command.guild_id, event.command.usr.id, "settings.secondary_language.updated", { { "language", language } }));
 	}
 
 	void handle_modlog_set(const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
 		if (!is_settings_admin(event)) {
-			reply_ephemeral(event, "You need server admin permission to set the moderation log channel.");
+			reply_ephemeral(event, localization::user_text(event.command.guild_id, event.command.usr.id, "settings.permission.admin"));
 			return;
 		}
 
@@ -166,7 +203,7 @@ namespace {
 
 	void handle_modlog_clear(const dpp::slashcommand_t& event) {
 		if (!is_settings_admin(event)) {
-			reply_ephemeral(event, "You need server admin permission to clear the moderation log channel.");
+			reply_ephemeral(event, localization::user_text(event.command.guild_id, event.command.usr.id, "settings.permission.admin"));
 			return;
 		}
 
@@ -183,7 +220,7 @@ void register_settings_commands(dpp::cluster& bot) {
 	handlers["settings"] = [](const dpp::slashcommand_t& event) {
 		const auto interaction = event.command.get_command_interaction();
 		if (interaction.options.empty()) {
-			reply_ephemeral(event, "Choose a settings subcommand.");
+			reply_ephemeral(event, localization::user_text(event.command.guild_id, event.command.usr.id, "settings.unknown"));
 			return;
 		}
 
@@ -193,9 +230,10 @@ void register_settings_commands(dpp::cluster& bot) {
 		if (subcommand.name == "set_moderator_role") return handle_set_moderator_role(event, subcommand);
 		if (subcommand.name == "set_staff_role") return handle_set_staff_role(event, subcommand);
 		if (subcommand.name == "language") return handle_language(event, subcommand);
+		if (subcommand.name == "secondary_language") return handle_secondary_language(event, subcommand);
 		if (subcommand.name == "modlog_set") return handle_modlog_set(event, subcommand);
 		if (subcommand.name == "modlog_clear") return handle_modlog_clear(event);
 
-		reply_ephemeral(event, "Unknown settings subcommand.");
+		reply_ephemeral(event, localization::user_text(event.command.guild_id, event.command.usr.id, "settings.unknown"));
 	};
 }

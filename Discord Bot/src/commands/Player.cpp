@@ -1,4 +1,5 @@
 #include "core/CommandRegistry.hpp"
+#include "core/Localization.hpp"
 #include "core/sqlite.hpp"
 #include <memory>
 
@@ -116,5 +117,50 @@ void register_player_commands(dpp::cluster& bot) {
         else {
             event.reply("❌ Failed to unlink. You might not have that platform connected.");
         }
+    };
+
+    handlers["language"] = [](const dpp::slashcommand_t& event) {
+        const std::string language = std::get<std::string>(event.get_parameter("language"));
+
+        if (language == "none") {
+            if (!UserSettingsManager::clear_language(event.command.usr.id)) {
+                event.reply(dpp::message("Could not update your language preference.").set_flags(dpp::m_ephemeral));
+                return;
+            }
+
+            event.reply(
+                dpp::message(localization::user_text(
+                    event.command.guild_id,
+                    event.command.usr.id,
+                    "user.language.cleared"
+                )).set_flags(dpp::m_ephemeral)
+            );
+            return;
+        }
+
+        if (!localization::is_supported_language(language)) {
+            event.reply(
+                dpp::message(localization::user_text(
+                    event.command.guild_id,
+                    event.command.usr.id,
+                    "settings.language.unsupported"
+                )).set_flags(dpp::m_ephemeral)
+            );
+            return;
+        }
+
+        if (!UserSettingsManager::set_language(event.command.usr.id, language)) {
+            event.reply(dpp::message("Could not update your language preference.").set_flags(dpp::m_ephemeral));
+            return;
+        }
+
+        event.reply(
+            dpp::message(localization::user_text(
+                event.command.guild_id,
+                event.command.usr.id,
+                "user.language.updated",
+                { { "language", language } }
+            )).set_flags(dpp::m_ephemeral)
+        );
     };
 }

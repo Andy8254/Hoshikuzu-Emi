@@ -1,0 +1,30 @@
+{
+  "_meta": {
+    "language": "KO-kr",
+    "status": "placeholder",
+    "notes": "Preliminary beta1 localization seed. Review wording before production use."
+  },
+  "hello.default": "안녕하세요, 에미예요!",
+  "hello.mentioned": "{mention}님, 다시 오셨군요. 오늘 하루는 어떠신가요?",
+  "beta.notice": "이 기능은 아직 테스트 중입니다.",
+  "error.soft": "작업이 정상적으로 처리되지 않았습니다. 다시 시도하거나 스태프에게 문의해 주세요.",
+  "moderation.case.recorded": "제재 기록 {case_id}번이 등록되었습니다.",
+  "tournament.register.ok": "{tournament_id}번 토너먼트에 등록되었습니다.",
+  "tournament.checkin.ok": "{tournament_id}번 토너먼트 체크인이 완료되었습니다.",
+  "settings.permission.staff": "설정을 보려면 서버 스태프 권한이 필요합니다.",
+  "settings.permission.owner": "서버 소유자 또는 봇 개발자만 관리자 역할을 설정할 수 있습니다.",
+  "settings.permission.admin": "이 설정을 변경하려면 서버 관리자 권한이 필요합니다.",
+  "settings.permission.moderator": "이 설정을 변경하려면 서버 모더레이터 권한이 필요합니다.",
+  "settings.language.updated": "언어가 `{language}`(으)로 설정되었습니다.",
+  "settings.secondary_language.updated": "보조 언어가 `{language}`(으)로 설정되었습니다.",
+  "settings.secondary_language.cleared": "보조 언어가 비활성화되었습니다.",
+  "settings.language.unsupported": "아직 사용할 수 없는 언어입니다.",
+  "settings.unknown": "알 수 없는 설정 하위 명령어입니다.",
+  "user.language.updated": "개인 언어 설정이 `{language}`(으)로 변경되었습니다.",
+  "user.language.cleared": "개인 언어 설정이 초기화되었습니다.",
+  "tournament.generate.unknown": "알 수 없는 대진 형식입니다.",
+  "tournament.generate.failed": "매치를 생성할 수 없습니다. 체크인한 플레이어가 2명 이상인지, 현재 Swiss 라운드가 완료되었는지 확인해 주세요.",
+  "tournament.generate.ok": "{tournament_id}번 토너먼트에 {format} 매치를 생성했습니다.",
+  "tournament.standings.empty": "완료된 Swiss 또는 라운드 로빈 매치가 없습니다.",
+  "tournament.standings.title": "`{tournament_id}`번 토너먼트 순위:"
+}
