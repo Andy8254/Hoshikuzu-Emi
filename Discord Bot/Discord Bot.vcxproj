@@ -20,6 +20,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\commands\Discord_Commands.hpp" />
+    <ClInclude Include="include\commands\CommandRegistration.hpp" />
     <ClInclude Include="include\core\api_fetcher.hpp" />
     <ClInclude Include="include\core\CommandRegistry.hpp" />
     <ClInclude Include="include\core\Config.hpp" />
@@ -27,7 +28,10 @@
     <ClInclude Include="include\core\Localization.hpp" />
     <ClInclude Include="include\core\Markdown.hpp" />
     <ClInclude Include="include\core\security\PermissionManager.hpp" />
+    <ClInclude Include="include\core\SensitiveText.hpp" />
+    <ClInclude Include="include\core\SqlReliabilityCheck.hpp" />
     <ClInclude Include="include\core\sqlite.hpp" />
+    <ClInclude Include="include\interactions\InteractionHandlers.hpp" />
     <ClInclude Include="include\tetrio\TetrioService.hpp" />
     <ClInclude Include="include\tetrio\TetrioUtils.hpp" />
     <ClInclude Include="include\tournament\bracket\Bracket.hpp" />
@@ -48,6 +52,7 @@
     <ClInclude Include="include\tournament\utility\BracketSvg.hpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="src\commands\CommandRegistration.cpp" />
     <ClCompile Include="src\commands\Fundamentals.cpp" />
     <ClCompile Include="src\commands\General.cpp" />
     <ClCompile Include="src\commands\main.cpp" />
@@ -57,11 +62,14 @@
     <ClCompile Include="src\commands\Settings.cpp" />
     <ClCompile Include="src\commands\TETRIO.cpp" />
     <ClCompile Include="src\commands\Tournament.cpp" />
+    <ClCompile Include="src\interactions\InteractionHandlers.cpp" />
     <ClCompile Include="src\core\api_fetcher.cpp" />
     <ClCompile Include="src\core\CommandRegistry.cpp" />
     <ClCompile Include="src\core\Localization.cpp" />
     <ClCompile Include="src\core\Markdown.cpp" />
     <ClCompile Include="src\core\security\PermissionManager.cpp" />
+    <ClCompile Include="src\core\SensitiveText.cpp" />
+    <ClCompile Include="src\core\SqlReliabilityCheck.cpp" />
     <ClCompile Include="src\core\sqlite.cpp" />
     <ClCompile Include="src\tetrio\TetrioService.cpp" />
     <ClCompile Include="src\tetrio\TetrioUtils.cpp" />

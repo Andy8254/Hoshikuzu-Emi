@@ -10,6 +10,7 @@ struct TetrioProfile {
 
 	double rating = 0;
 	std::string rank = "Z";
+	std::string top_rank = "Z";
 
 	int world_rank = 0;
 	int country_rank = 0;

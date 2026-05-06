@@ -1,4 +1,5 @@
 #pragma once
+#include <optional>
 #include <string>
 #include <vector>
 #include "tournament/registration.hpp"
@@ -18,7 +19,31 @@ namespace tournament_seeding {
 		int seed = 0;
 		double tetrio_rating = 0.0;
 		int tetrio_world_rank = 0;
+		std::string tetrio_current_rank = "Z";
+		std::string tetrio_top_rank = "Z";
 		bool has_tetrio_data = false;
+	};
+
+	struct TetrioSeedFilters {
+		std::optional<std::string> current_rank_min;
+		std::optional<std::string> current_rank_max;
+		std::optional<std::string> top_rank_min;
+		std::optional<std::string> top_rank_max;
+		std::optional<double> tr_min;
+		std::optional<double> tr_max;
+		bool allow_unranked = false;
+	};
+
+	struct ExcludedPlayer {
+		std::string discord_id;
+		std::string display_name;
+		std::string tetrio_id;
+		std::string reason;
+	};
+
+	struct TetrioSeedResult {
+		std::vector<SeededPlayer> seeded;
+		std::vector<ExcludedPlayer> excluded;
 	};
 
 	std::vector<SeededPlayer> seed_general(
@@ -30,6 +55,12 @@ namespace tournament_seeding {
 		std::vector<tournament_registration::ParticipantRecord> participants
 	);
 
+	TetrioSeedResult seed_tetrio_with_filters(
+		std::vector<tournament_registration::ParticipantRecord> participants,
+		const TetrioSeedFilters& filters
+	);
+
 	std::vector<std::string> to_bracket_player_ids(const std::vector<SeededPlayer>& seeded_players);
 	std::string export_seed_csv(const std::vector<SeededPlayer>& seeded_players);
+	std::string export_excluded_csv(const std::vector<ExcludedPlayer>& excluded_players);
 }

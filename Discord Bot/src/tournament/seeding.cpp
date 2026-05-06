@@ -5,6 +5,56 @@
 #include <sstream>
 
 namespace {
+	int rank_value(const std::string& rank) {
+		const std::pair<const char*, int> ranks[] = {
+			{ "Z", 0 },
+			{ "D", 1 },
+			{ "D+", 2 },
+			{ "C-", 3 },
+			{ "C", 4 },
+			{ "C+", 5 },
+			{ "B-", 6 },
+			{ "B", 7 },
+			{ "B+", 8 },
+			{ "A-", 9 },
+			{ "A", 10 },
+			{ "A+", 11 },
+			{ "S-", 12 },
+			{ "S", 13 },
+			{ "S+", 14 },
+			{ "SS", 15 },
+			{ "U", 16 },
+			{ "X", 17 },
+			{ "X+", 18 }
+		};
+
+		for (const auto& [name, value] : ranks) {
+			if (rank == name) {
+				return value;
+			}
+		}
+
+		return -1;
+	}
+
+	bool has_filters(const tournament_seeding::TetrioSeedFilters& filters) {
+		return filters.current_rank_min
+			|| filters.current_rank_max
+			|| filters.top_rank_min
+			|| filters.top_rank_max
+			|| filters.tr_min
+			|| filters.tr_max
+			|| filters.allow_unranked;
+	}
+
+	bool rank_below_min(const std::string& rank, const std::optional<std::string>& minimum) {
+		return minimum && rank_value(rank) < rank_value(*minimum);
+	}
+
+	bool rank_above_max(const std::string& rank, const std::optional<std::string>& maximum) {
+		return maximum && rank_value(rank) > rank_value(*maximum);
+	}
+
 	bool is_seedable(const tournament_registration::ParticipantRecord& participant) {
 		return participant.status == tournament_registration::ParticipantStatus::CheckedIn
 			|| participant.status == tournament_registration::ParticipantStatus::LateCheckedIn;
@@ -93,23 +143,94 @@ std::vector<tournament_seeding::SeededPlayer> tournament_seeding::seed_general(
 std::vector<tournament_seeding::SeededPlayer> tournament_seeding::seed_tetrio(
 	std::vector<tournament_registration::ParticipantRecord> participants
 ) {
+	return seed_tetrio_with_filters(std::move(participants), {}).seeded;
+}
+
+tournament_seeding::TetrioSeedResult tournament_seeding::seed_tetrio_with_filters(
+	std::vector<tournament_registration::ParticipantRecord> participants,
+	const TetrioSeedFilters& filters
+) {
+	TetrioSeedResult result;
 	std::vector<SeededPlayer> players = seed_general(std::move(participants));
+	const bool filter_active = has_filters(filters);
 
 	for (SeededPlayer& player : players) {
 		if (player.tetrio_id.empty()) {
+			if (filter_active) {
+				result.excluded.push_back({ player.discord_id, player.display_name, player.tetrio_id, "Missing TETR.IO username" });
+			}
 			continue;
 		}
 
 		auto profile = TetrioService::fetch_user(player.tetrio_id);
 		if (!profile) {
+			if (filter_active) {
+				result.excluded.push_back({ player.discord_id, player.display_name, player.tetrio_id, "Could not fetch TETR.IO profile" });
+			}
 			continue;
 		}
 
 		player.tetrio_id = profile->username;
 		player.tetrio_rating = profile->rating;
 		player.tetrio_world_rank = profile->world_rank;
+		player.tetrio_current_rank = profile->rank;
+		player.tetrio_top_rank = profile->top_rank;
 		player.has_tetrio_data = profile->has_league_data;
+
+		if (filter_active && !player.has_tetrio_data && !filters.allow_unranked) {
+			result.excluded.push_back({ player.discord_id, player.display_name, player.tetrio_id, "No TETRA LEAGUE data" });
+			player.discord_id.clear();
+			continue;
+		}
+
+		if (filter_active && !player.has_tetrio_data) {
+			continue;
+		}
+
+		const bool allowed_unranked_rank = filters.allow_unranked && player.tetrio_current_rank == "Z";
+		if (!allowed_unranked_rank && rank_below_min(player.tetrio_current_rank, filters.current_rank_min)) {
+			result.excluded.push_back({ player.discord_id, player.display_name, player.tetrio_id, "Current rank below minimum" });
+			player.discord_id.clear();
+			continue;
+		}
+
+		if (!allowed_unranked_rank && rank_above_max(player.tetrio_current_rank, filters.current_rank_max)) {
+			result.excluded.push_back({ player.discord_id, player.display_name, player.tetrio_id, "Current rank above maximum" });
+			player.discord_id.clear();
+			continue;
+		}
+
+		if (!allowed_unranked_rank && rank_below_min(player.tetrio_top_rank, filters.top_rank_min)) {
+			result.excluded.push_back({ player.discord_id, player.display_name, player.tetrio_id, "Top rank below minimum" });
+			player.discord_id.clear();
+			continue;
+		}
+
+		if (!allowed_unranked_rank && rank_above_max(player.tetrio_top_rank, filters.top_rank_max)) {
+			result.excluded.push_back({ player.discord_id, player.display_name, player.tetrio_id, "Top rank above maximum" });
+			player.discord_id.clear();
+			continue;
+		}
+
+		if (filters.tr_min && player.tetrio_rating < *filters.tr_min) {
+			result.excluded.push_back({ player.discord_id, player.display_name, player.tetrio_id, "TR below minimum" });
+			player.discord_id.clear();
+			continue;
+		}
+
+		if (filters.tr_max && player.tetrio_rating > *filters.tr_max) {
+			result.excluded.push_back({ player.discord_id, player.display_name, player.tetrio_id, "TR above maximum" });
+			player.discord_id.clear();
+			continue;
+		}
 	}
+
+	players.erase(
+		std::remove_if(players.begin(), players.end(), [](const SeededPlayer& player) {
+			return player.discord_id.empty();
+		}),
+		players.end()
+	);
 
 	std::stable_sort(
 		players.begin(),
@@ -134,7 +255,8 @@ std::vector<tournament_seeding::SeededPlayer> tournament_seeding::seed_tetrio(
 	);
 
 	assign_seeds(players);
-	return players;
+	result.seeded = std::move(players);
+	return result;
 }
 
 std::vector<std::string> tournament_seeding::to_bracket_player_ids(
@@ -152,7 +274,7 @@ std::vector<std::string> tournament_seeding::to_bracket_player_ids(
 
 std::string tournament_seeding::export_seed_csv(const std::vector<SeededPlayer>& seeded_players) {
 	std::ostringstream csv;
-	csv << "seed,discord_id,display_name,tetrio_id,tetrio_rating,tetrio_world_rank,has_tetrio_data\n";
+	csv << "seed,discord_id,display_name,tetrio_id,tetrio_rating,tetrio_current_rank,tetrio_top_rank,tetrio_world_rank,has_tetrio_data\n";
 
 	for (const SeededPlayer& player : seeded_players) {
 		csv
@@ -161,8 +283,25 @@ std::string tournament_seeding::export_seed_csv(const std::vector<SeededPlayer>&
 			<< csv_escape(player.display_name) << ','
 			<< csv_escape(player.tetrio_id) << ','
 			<< player.tetrio_rating << ','
+			<< csv_escape(player.tetrio_current_rank) << ','
+			<< csv_escape(player.tetrio_top_rank) << ','
 			<< player.tetrio_world_rank << ','
 			<< (player.has_tetrio_data ? "true" : "false") << '\n';
+	}
+
+	return csv.str();
+}
+
+std::string tournament_seeding::export_excluded_csv(const std::vector<ExcludedPlayer>& excluded_players) {
+	std::ostringstream csv;
+	csv << "discord_id,display_name,tetrio_id,reason\n";
+
+	for (const ExcludedPlayer& player : excluded_players) {
+		csv
+			<< csv_escape(player.discord_id) << ','
+			<< csv_escape(player.display_name) << ','
+			<< csv_escape(player.tetrio_id) << ','
+			<< csv_escape(player.reason) << '\n';
 	}
 
 	return csv.str();

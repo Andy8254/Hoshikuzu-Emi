@@ -1,4 +1,5 @@
 #include "core/sqlite.hpp"
+#include "core/SensitiveText.hpp"
 #include <cstdlib>
 #include <iostream>
 #include <ctime>
@@ -722,7 +723,7 @@ bool ServerSettingsManager::init() {
         "moderator_role_id INTEGER,"
         "staff_role_id INTEGER,"
         "language TEXT DEFAULT 'EN-gb',"
-        "secondary_language TEXT DEFAULT '',"
+        "secondary_language TEXT DEFAULT NULL,"
         "modlog_channel_id INTEGER"
         ");";
 
@@ -736,7 +737,7 @@ bool ServerSettingsManager::init() {
         "moderator_role_id INTEGER",
         "staff_role_id INTEGER",
         "language TEXT DEFAULT 'EN-gb'",
-        "secondary_language TEXT DEFAULT ''",
+        "secondary_language TEXT DEFAULT NULL",
         "modlog_channel_id INTEGER"
     };
 
@@ -937,8 +938,8 @@ bool ServerSettingsManager::clear_secondary_language(dpp::snowflake guild_id) {
     sqlite3_stmt* stmt;
     const char* sql =
         "INSERT INTO server_settings (guild_id, secondary_language) "
-        "VALUES (?, '') "
-        "ON CONFLICT(guild_id) DO UPDATE SET secondary_language = '';";
+        "VALUES (?, NULL) "
+        "ON CONFLICT(guild_id) DO UPDATE SET secondary_language = NULL;";
 
     if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
         return false;
@@ -1146,6 +1147,10 @@ bool ModerationManager::init() {
         && get_db().set_schema_version(1);
 }
 
+bool ModerationManager::encryption_enabled() {
+    return sensitive_text::encryption_available();
+}
+
 std::optional<int> ModerationManager::create_case(
     dpp::snowflake guild_id,
     dpp::snowflake target_id,
@@ -1172,7 +1177,8 @@ std::optional<int> ModerationManager::create_case(
     sqlite3_bind_int64(stmt, 2, target_id);
     sqlite3_bind_int64(stmt, 3, actor_id);
     sqlite3_bind_text(stmt, 4, action.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 5, reason.c_str(), -1, SQLITE_TRANSIENT);
+    const std::string stored_reason = sensitive_text::protect(reason);
+    sqlite3_bind_text(stmt, 5, stored_reason.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_int(stmt, 6, duration_seconds);
     sqlite3_bind_int(stmt, 7, static_cast<int>(time(nullptr)));
 
@@ -1215,7 +1221,7 @@ std::vector<ModerationCase> ModerationManager::list_cases(dpp::snowflake guild_i
         const unsigned char* action = sqlite3_column_text(stmt, 4);
         const unsigned char* reason = sqlite3_column_text(stmt, 5);
         entry.action = action ? reinterpret_cast<const char*>(action) : "";
-        entry.reason = reason ? reinterpret_cast<const char*>(reason) : "";
+        entry.reason = reason ? sensitive_text::reveal(reinterpret_cast<const char*>(reason)) : "";
         entry.duration_seconds = sqlite3_column_int(stmt, 6);
         entry.created_at = sqlite3_column_int(stmt, 7);
         result.push_back(entry);

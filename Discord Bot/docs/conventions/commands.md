@@ -2,6 +2,17 @@
 
 ## Command Shape
 
+Current grouped slash command surface:
+
+- `/bot`: help, hello, ping, info, privacy
+- `/profile`: player profile, linked accounts, personal language, TETR.IO lookup
+- `/settings`: server settings
+- `/mod`: moderation tools
+- `/tournament`: tournament workflows, bracket operations, tournament config
+
+Help files live under `resources/help/<language>/<module>/<command>.md`.
+`EN-gb` is the fallback. `KO-kr` placeholder files may be empty; empty localized files intentionally fall back to `EN-gb`.
+
 Use direct slash commands for:
 
 - Staff/admin actions
@@ -15,6 +26,23 @@ Use buttons/select menus for:
 - Registration/check-in panels
 - Staff dashboard shortcuts
 - Actions where IDs can be inferred from context
+
+Registration/check-in panels should keep the player workflow short:
+
+- Registration button opens a username modal.
+- Check-in button reuses the registered username.
+- Staff slash commands remain available for overrides and recovery.
+
+Secondary display language is disabled by default. Use `/settings secondary_language language:KO-kr` to enable the Korean secondary display.
+
+Player match screens should expose the same four actions everywhere:
+
+- `Check in`
+- `Report Score`
+- `Forfeit`
+- `Call Staff`
+
+Report and forfeit actions should use modals. Forfeit must require explicit confirmation.
 
 ## Naming
 
@@ -66,3 +94,4 @@ Embed UI should reduce friction, not remove direct command paths.
 
 Direct staff commands should remain available for recovery and debugging.
 
+When adding a new command, prefer fitting it into an existing group before creating a new top-level command. New top-level commands should represent a durable product area, not a single action.

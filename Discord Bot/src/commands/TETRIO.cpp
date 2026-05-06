@@ -1,4 +1,5 @@
 #include "core/CommandRegistry.hpp"
+#include "core/Localization.hpp"
 #include "tetrio/TetrioService.hpp"
 #include "tetrio/TetrioUtils.hpp"
 #include "core/sqlite.hpp"
@@ -24,7 +25,7 @@ void register_tetrio_commands(dpp::cluster& bot) {
             auto profile = PlayerManager::get_profile(event.command.usr.id);
 
             if (profile.empty() || !profile.count("tetrio_id") || profile["tetrio_id"].empty()) {
-                event.reply("❌ You haven’t linked a TETR.IO account yet. Use `/link platform:tetrio id:<your_username>` first.");
+                event.reply(localization::message_text(event.command.guild_id, event.command.usr.id, "tetrio.link_required"));
                 return;
             }
 
@@ -42,7 +43,7 @@ void register_tetrio_commands(dpp::cluster& bot) {
                 auto profile = TetrioService::fetch_user(username);
 
                 if (!profile) {
-                    ctx.edit_response("❌ User not found or API error.");
+                    ctx.edit_response(localization::message_text(ctx.command.guild_id, ctx.command.usr.id, "tetrio.not_found"));
                     return;
                 }
 
@@ -106,7 +107,7 @@ void register_tetrio_commands(dpp::cluster& bot) {
                 ctx.edit_response(std::string("❌ Error: ") + e.what());
             }
             catch (...) {
-                ctx.edit_response("❌ Unknown error occurred.");
+                ctx.edit_response(localization::message_text(ctx.command.guild_id, ctx.command.usr.id, "tetrio.unknown_error"));
             }
         });
 

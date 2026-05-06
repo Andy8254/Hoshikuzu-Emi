@@ -9,6 +9,9 @@
 #include "tournament/ruleset.hpp"
 #include "tournament/seeding.hpp"
 #include "tournament/utility/BracketSvg.hpp"
+#include "tetrio/TetrioService.hpp"
+#include <algorithm>
+#include <cctype>
 #include <ctime>
 #include <sstream>
 
@@ -48,6 +51,23 @@ namespace {
 		return static_cast<int>(std::get<int64_t>(option->value));
 	}
 
+	std::optional<double> get_number_option(const dpp::command_data_option& parent, const std::string& name) {
+		const auto* option = find_option(parent, name);
+		if (!option) {
+			return std::nullopt;
+		}
+
+		if (std::holds_alternative<double>(option->value)) {
+			return std::get<double>(option->value);
+		}
+
+		if (std::holds_alternative<int64_t>(option->value)) {
+			return static_cast<double>(std::get<int64_t>(option->value));
+		}
+
+		return std::nullopt;
+	}
+
 	bool get_bool_option(const dpp::command_data_option& parent, const std::string& name, bool fallback = false) {
 		const auto* option = find_option(parent, name);
 		if (!option || !std::holds_alternative<bool>(option->value)) {
@@ -78,11 +98,129 @@ namespace {
 		return "<#" + std::to_string(channel_id) + ">";
 	}
 
+	std::string role_display(dpp::snowflake role_id) {
+		if (!role_id) {
+			return "Not configured";
+		}
+
+		return "<@&" + std::to_string(role_id) + ">";
+	}
+
 	std::string format_display(const std::string& format) {
 		if (format == "double_elimination") return "Double elimination";
 		if (format == "round_robin") return "Round robin";
 		if (format == "swiss") return "Swiss";
 		return "Single elimination";
+	}
+
+	std::string normalize_rank(std::string rank) {
+		std::transform(rank.begin(), rank.end(), rank.begin(), [](unsigned char ch) {
+			return static_cast<char>(std::toupper(ch));
+		});
+		return rank;
+	}
+
+	int rank_value(const std::string& rank) {
+		const std::pair<const char*, int> ranks[] = {
+			{ "Z", 0 }, { "D", 1 }, { "D+", 2 }, { "C-", 3 }, { "C", 4 },
+			{ "C+", 5 }, { "B-", 6 }, { "B", 7 }, { "B+", 8 },
+			{ "A-", 9 }, { "A", 10 }, { "A+", 11 }, { "S-", 12 },
+			{ "S", 13 }, { "S+", 14 }, { "SS", 15 }, { "U", 16 },
+			{ "X", 17 }, { "X+", 18 }
+		};
+
+		for (const auto& [name, value] : ranks) {
+			if (rank == name) {
+				return value;
+			}
+		}
+
+		return -1;
+	}
+
+	bool valid_rank(const std::string& rank) {
+		return rank.empty() || rank_value(normalize_rank(rank)) >= 0;
+	}
+
+	bool tetrio_filters_active(const tournament_seeding::TetrioSeedFilters& filters) {
+		return filters.current_rank_min || filters.current_rank_max
+			|| filters.top_rank_min || filters.top_rank_max
+			|| filters.tr_min || filters.tr_max
+			|| filters.allow_unranked;
+	}
+
+	std::string describe_tetrio_filters(const tournament_seeding::TetrioSeedFilters& filters) {
+		if (!tetrio_filters_active(filters)) {
+			return "None";
+		}
+
+		std::ostringstream out;
+		if (filters.current_rank_min) out << "Current rank >= " << *filters.current_rank_min << "\n";
+		if (filters.current_rank_max) out << "Current rank <= " << *filters.current_rank_max << "\n";
+		if (filters.top_rank_min) out << "Top rank >= " << *filters.top_rank_min << "\n";
+		if (filters.top_rank_max) out << "Top rank <= " << *filters.top_rank_max << "\n";
+		if (filters.tr_min) out << "TR >= " << *filters.tr_min << "\n";
+		if (filters.tr_max) out << "TR <= " << *filters.tr_max << "\n";
+		out << "Allow unranked: " << (filters.allow_unranked ? "Yes" : "No") << "\n";
+		return out.str();
+	}
+
+	struct EligibilityFailure {
+		std::string key;
+		localization::Params params;
+	};
+
+	std::optional<EligibilityFailure> check_tetrio_eligibility(
+		const tournament_manage::TournamentRecord& tournament,
+		const std::string& username
+	) {
+		if (!tetrio_filters_active(tournament.tetrio_filters)) {
+			return std::nullopt;
+		}
+
+		if (username.empty()) {
+			return EligibilityFailure{ "tournament.tetrio_filter.username_required", {} };
+		}
+
+		auto profile = TetrioService::fetch_user(username);
+		if (!profile) {
+			return EligibilityFailure{ "tournament.tetrio_filter.profile_not_found", { { "username", username } } };
+		}
+
+		if (!profile->has_league_data && tournament.tetrio_filters.allow_unranked) {
+			return std::nullopt;
+		}
+
+		if (!profile->has_league_data) {
+			return EligibilityFailure{ "tournament.tetrio_filter.no_league", { { "username", profile->username } } };
+		}
+
+		const auto& filters = tournament.tetrio_filters;
+		const bool allowed_unranked_rank = filters.allow_unranked && profile->rank == "Z";
+		if (!allowed_unranked_rank && filters.current_rank_min && rank_value(profile->rank) < rank_value(*filters.current_rank_min)) {
+			return EligibilityFailure{ "tournament.tetrio_filter.current_rank_below", { { "player", profile->username } } };
+		}
+		if (!allowed_unranked_rank && filters.current_rank_max && rank_value(profile->rank) > rank_value(*filters.current_rank_max)) {
+			return EligibilityFailure{ "tournament.tetrio_filter.current_rank_above", { { "player", profile->username } } };
+		}
+		if (!allowed_unranked_rank && filters.top_rank_min && rank_value(profile->top_rank) < rank_value(*filters.top_rank_min)) {
+			return EligibilityFailure{ "tournament.tetrio_filter.top_rank_below", { { "player", profile->username } } };
+		}
+		if (!allowed_unranked_rank && filters.top_rank_max && rank_value(profile->top_rank) > rank_value(*filters.top_rank_max)) {
+			return EligibilityFailure{ "tournament.tetrio_filter.top_rank_above", { { "player", profile->username } } };
+		}
+		if (filters.tr_min && profile->rating < *filters.tr_min) {
+			return EligibilityFailure{ "tournament.tetrio_filter.tr_below", { { "player", profile->username } } };
+		}
+		if (filters.tr_max && profile->rating > *filters.tr_max) {
+			return EligibilityFailure{ "tournament.tetrio_filter.tr_above", { { "player", profile->username } } };
+		}
+
+		return std::nullopt;
+	}
+
+	std::string et(dpp::snowflake guild_id, const std::string& key, const localization::Params& params = {}) {
+		return localization::shared_embed_text(guild_id, key, params);
 	}
 
 	std::string user_display(const dpp::slashcommand_t& event, dpp::snowflake user_id) {
@@ -104,6 +242,39 @@ namespace {
 
 	void edit_ephemeral(const dpp::slashcommand_t& event, const std::string& content) {
 		event.edit_response(dpp::message(content).set_flags(dpp::m_ephemeral));
+	}
+
+	std::string participant_result_text(const dpp::slashcommand_t& event, const std::string& message) {
+		const std::pair<const char*, const char*> map[] = {
+			{ "Invalid tournament or player.", "registration.result.invalid_player" },
+			{ "Please provide the username you want to register with.", "registration.result.username_required" },
+			{ "That username does not match the TETR.IO account linked to your bot profile.", "registration.result.username_mismatch" },
+			{ "Could not initialize participant storage.", "registration.result.storage_failed" },
+			{ "Could not prepare registration.", "registration.result.prepare_registration_failed" },
+			{ "Could not register you for this tournament.", "registration.result.register_failed" },
+			{ "Registration saved, but could not reload your participant record.", "registration.result.reload_failed" },
+			{ "You are registered for this tournament.", "registration.result.registered" },
+			{ "You are not registered for this tournament.", "registration.result.not_registered" },
+			{ "Could not prepare unregister request.", "registration.result.prepare_unregister_failed" },
+			{ "Could not unregister you from this tournament.", "registration.result.unregister_failed" },
+			{ "You have been removed from this tournament.", "registration.result.unregistered" },
+			{ "Check-in is closed, including the grace period.", "registration.result.checkin_grace_closed" },
+			{ "Could not prepare check-in.", "registration.result.prepare_checkin_failed" },
+			{ "Could not check you in.", "registration.result.checkin_failed" },
+			{ "You are checked in during grace time.", "registration.result.checked_in_late" },
+			{ "You are checked in.", "registration.result.checked_in" },
+			{ "Could not prepare check-in rollback.", "registration.result.prepare_undo_checkin_failed" },
+			{ "Could not undo check-in.", "registration.result.undo_checkin_failed" },
+			{ "Check-in has been undone.", "registration.result.undo_checkin_ok" }
+		};
+
+		for (const auto& [source, key] : map) {
+			if (message == source) {
+				return localization::user_text(event.command.guild_id, event.command.usr.id, key);
+			}
+		}
+
+		return message;
 	}
 
 	void edit_logged(const dpp::slashcommand_t& event, const std::string& content) {
@@ -143,6 +314,64 @@ namespace {
 			.set_footer(dpp::embed_footer().set_text("Action by " + event.command.usr.username));
 
 		bot.message_create(dpp::message(channel_id, "").add_embed(embed));
+	}
+
+	bool post_registration_panel(dpp::cluster& bot, const dpp::slashcommand_t& event, int tournament_id) {
+		const dpp::snowflake channel_id = GuildConfigManager::get_tournament_channel(event.command.guild_id);
+		if (!channel_id) {
+			return false;
+		}
+
+		auto tournament = tournament_manage::get_tournament(tournament_id);
+		const std::string name = tournament ? tournament->name : ("Tournament " + std::to_string(tournament_id));
+
+		dpp::embed embed = dpp::embed()
+			.set_title(name)
+			.set_description(et(event.command.guild_id, "embed.tournament.registration_open.description"))
+			.set_color(0x5f9ea0)
+			.add_field(et(event.command.guild_id, "embed.tournament.registration_open.field.register"), et(event.command.guild_id, "embed.tournament.registration_open.field.register.value"), false);
+
+		dpp::component actions;
+		actions.add_component(
+			dpp::component()
+			.set_label("Register")
+			.set_id("tournament:register:" + std::to_string(tournament_id) + ":0")
+			.set_style(dpp::cos_success)
+		);
+
+		bot.message_create(dpp::message(channel_id, "").add_embed(embed).add_component(actions));
+		return true;
+	}
+
+	bool post_checkin_panel(dpp::cluster& bot, const dpp::slashcommand_t& event, int tournament_id, int closes_at) {
+		const dpp::snowflake channel_id = GuildConfigManager::get_tournament_channel(event.command.guild_id);
+		if (!channel_id) {
+			return false;
+		}
+
+		auto tournament = tournament_manage::get_tournament(tournament_id);
+		const std::string name = tournament ? tournament->name : ("Tournament " + std::to_string(tournament_id));
+
+		dpp::embed embed = dpp::embed()
+			.set_title(name)
+			.set_description(et(event.command.guild_id, "embed.tournament.checkin_open.description"))
+			.set_color(0xf0b429)
+			.add_field(et(event.command.guild_id, "embed.tournament.checkin_open.field.checkin"), et(event.command.guild_id, "embed.tournament.checkin_open.field.checkin.value"), false);
+
+		if (closes_at > 0) {
+			embed.add_field(et(event.command.guild_id, "embed.tournament.field.closes_at"), "<t:" + std::to_string(closes_at) + ":R>", true);
+		}
+
+		dpp::component actions;
+		actions.add_component(
+			dpp::component()
+			.set_label("Check in")
+			.set_id("tournament:checkin:" + std::to_string(tournament_id) + ":0")
+			.set_style(dpp::cos_primary)
+		);
+
+		bot.message_create(dpp::message(channel_id, "").add_embed(embed).add_component(actions));
+		return true;
 	}
 
 	std::string yes_no(bool value) {
@@ -201,6 +430,65 @@ namespace {
 
 		reply_ephemeral(event, "Please use the tournament channel: " + channel_display(configured_channel));
 		return false;
+	}
+
+	std::string recent_tournament_summary() {
+		const auto tournaments = tournament_manage::list_tournaments();
+		if (tournaments.empty()) {
+			return "No tournaments found. Start with `/tournament create`.";
+		}
+
+		std::ostringstream out;
+		const size_t limit = tournaments.size() < 5 ? tournaments.size() : 5;
+		for (size_t i = 0; i < limit; ++i) {
+			const auto& item = tournaments[i];
+			out << "`" << item.id << "` " << item.name
+				<< " - " << format_display(item.format)
+				<< ", " << item.status << "\n";
+		}
+		return out.str();
+	}
+
+	dpp::component tournament_dashboard_buttons() {
+		dpp::component actions;
+		actions.add_component(
+			dpp::component()
+			.set_label("Tournament help")
+			.set_id("staffdash:tournament:help:0")
+			.set_style(dpp::cos_secondary)
+		).add_component(
+			dpp::component()
+			.set_label("Bracket help")
+			.set_id("staffdash:tournament_bracket:help:0")
+			.set_style(dpp::cos_secondary)
+		).add_component(
+			dpp::component()
+			.set_label("Config help")
+			.set_id("staffdash:tournament_config:help:0")
+			.set_style(dpp::cos_secondary)
+		);
+		return actions;
+	}
+
+	void handle_dashboard(const dpp::slashcommand_t& event) {
+		if (!require_manage(event)) {
+			return;
+		}
+
+		GuildConfigManager::init();
+		dpp::embed embed = dpp::embed()
+			.set_title("Tournament Staff Dashboard")
+			.set_description("Staff-only overview for tournament setup, player flow, and bracket operations.")
+			.set_color(0x5f9ea0)
+			.add_field("Recent tournaments", recent_tournament_summary(), false)
+			.add_field("Player flow", "`/tournament registration_open`, `/tournament checkin_open`, `/tournament participants`, `/tournament seed`", false)
+			.add_field("Bracket flow", "`/tournament bracket generate`, `/tournament bracket current`, `/tournament bracket report`, `/tournament bracket threads`", false)
+			.add_field("Tournament channel", channel_display(GuildConfigManager::get_tournament_channel(event.command.guild_id)), true)
+			.add_field("Tournament log", channel_display(GuildConfigManager::get_tournament_log_channel(event.command.guild_id)), true)
+			.add_field("Staff role", role_display(GuildConfigManager::get_staff_role(event.command.guild_id)), true)
+			.add_field("Admin role", role_display(GuildConfigManager::get_admin_role(event.command.guild_id)), true);
+
+		event.reply(dpp::message().add_embed(embed).add_component(tournament_dashboard_buttons()).set_flags(dpp::m_ephemeral));
 	}
 
 	std::string participant_summary(const std::vector<tournament_registration::ParticipantRecord>& participants) {
@@ -319,17 +607,17 @@ namespace {
 		dpp::embed embed = dpp::embed()
 			.set_title(tournament->name)
 			.set_color(0x5f9ea0)
-			.add_field("Platform", tournament->game_type.empty() ? "Unspecified" : tournament->game_type, true)
-			.add_field("Format", format_display(tournament->format), true)
-			.add_field("Status", tournament->status, true)
-			.add_field("Registration", yes_no(tournament->registration_open), true)
-			.add_field("Check-in", yes_no(tournament->checkin_open), true)
-			.add_field("Players", std::to_string(participants.size()), true)
-			.add_field("Checked in", std::to_string(checked_in.size()), true)
-			.add_field("Primary rules", tournament_ruleset::describe_ruleset(primary), false);
+			.add_field(et(event.command.guild_id, "embed.tournament.field.platform"), tournament->game_type.empty() ? et(event.command.guild_id, "embed.common.unspecified") : tournament->game_type, true)
+			.add_field(et(event.command.guild_id, "embed.tournament.field.format"), format_display(tournament->format), true)
+			.add_field(et(event.command.guild_id, "embed.tournament.field.status"), tournament->status, true)
+			.add_field(et(event.command.guild_id, "embed.tournament.field.registration"), yes_no(tournament->registration_open), true)
+			.add_field(et(event.command.guild_id, "embed.tournament.field.checkin"), yes_no(tournament->checkin_open), true)
+			.add_field(et(event.command.guild_id, "embed.tournament.field.players"), std::to_string(participants.size()), true)
+			.add_field(et(event.command.guild_id, "embed.tournament.field.checked_in"), std::to_string(checked_in.size()), true)
+			.add_field(et(event.command.guild_id, "embed.tournament.field.primary_rules"), tournament_ruleset::describe_ruleset(primary), false);
 
 		if (secondary) {
-			embed.add_field("Secondary rules", tournament_ruleset::describe_ruleset(*secondary), false);
+			embed.add_field(et(event.command.guild_id, "embed.tournament.field.secondary_rules"), tournament_ruleset::describe_ruleset(*secondary), false);
 		}
 
 		edit_logged_embed(event, embed);
@@ -361,6 +649,7 @@ namespace {
 			.add_field("Check-in open", yes_no(tournament->checkin_open), true)
 			.add_field("Check-in closes at", tournament->checkin_closes_at > 0 ? std::to_string(tournament->checkin_closes_at) : "Not set", true)
 			.add_field("Check-in grace", std::to_string(tournament->checkin_grace_time) + " seconds", true)
+			.add_field("TETR.IO restrictions", describe_tetrio_filters(tournament->tetrio_filters), false)
 			.add_field("Registered", std::to_string(count_status(participants, tournament_registration::ParticipantStatus::Registered)), true)
 			.add_field("Checked in", std::to_string(count_status(participants, tournament_registration::ParticipantStatus::CheckedIn)), true)
 			.add_field("Late checked in", std::to_string(count_status(participants, tournament_registration::ParticipantStatus::LateCheckedIn)), true)
@@ -469,7 +758,7 @@ namespace {
 				edit_logged(event, result.message + " Target: <@" + std::to_string(effective_user_id) + ">.");
 			}
 			else {
-				edit_ephemeral(event, result.message);
+				edit_ephemeral(event, participant_result_text(event, result.message));
 			}
 			if (result.ok) {
 				log_tournament_event(
@@ -504,6 +793,16 @@ namespace {
 			return;
 		}
 
+		if (auto failure = check_tetrio_eligibility(*tournament, username)) {
+			if (staff_action) {
+				edit_logged(event, localization::guild_text(event.command.guild_id, failure->key, failure->params));
+			}
+			else {
+				edit_ephemeral(event, localization::user_text(event.command.guild_id, event.command.usr.id, failure->key, failure->params));
+			}
+			return;
+		}
+
 		auto profile = PlayerManager::get_profile(effective_user_id);
 		const std::string linked_tetrio = profile.count("tetrio_id") ? profile["tetrio_id"] : "";
 
@@ -520,7 +819,7 @@ namespace {
 			edit_logged(event, result.message + " Target: <@" + std::to_string(effective_user_id) + ">.");
 		}
 		else {
-			edit_ephemeral(event, result.message);
+			edit_ephemeral(event, participant_result_text(event, result.message));
 		}
 		if (result.ok) {
 			log_tournament_event(
@@ -561,7 +860,7 @@ namespace {
 				edit_logged(event, result.message + " Target: <@" + std::to_string(effective_user_id) + ">.");
 			}
 			else {
-				edit_ephemeral(event, result.message);
+				edit_ephemeral(event, participant_result_text(event, result.message));
 			}
 			if (result.ok) {
 				log_tournament_event(
@@ -591,6 +890,16 @@ namespace {
 			? username
 			: (participant ? participant->provided_username : "");
 
+		if (auto failure = check_tetrio_eligibility(*tournament, effective_username)) {
+			if (staff_action) {
+				edit_logged(event, localization::guild_text(event.command.guild_id, failure->key, failure->params));
+			}
+			else {
+				edit_ephemeral(event, localization::user_text(event.command.guild_id, event.command.usr.id, failure->key, failure->params));
+			}
+			return;
+		}
+
 		auto profile = PlayerManager::get_profile(effective_user_id);
 		const std::string linked_tetrio = profile.count("tetrio_id") ? profile["tetrio_id"] : "";
 
@@ -609,7 +918,7 @@ namespace {
 			edit_logged(event, result.message + " Target: <@" + std::to_string(effective_user_id) + ">.");
 		}
 		else {
-			edit_ephemeral(event, result.message);
+			edit_ephemeral(event, participant_result_text(event, result.message));
 		}
 		if (result.ok) {
 			log_tournament_event(
@@ -637,11 +946,20 @@ namespace {
 
 		const int tournament_id = get_int_option(subcommand, "id");
 		const std::string mode = get_string_option(subcommand, "mode", "general");
+		const auto tournament = tournament_manage::get_tournament(tournament_id);
+		if (!tournament) {
+			edit_logged(event, "Tournament not found.");
+			return;
+		}
+
 		auto participants = tournament_registration::list_checked_in_participants(tournament_id);
 
 		std::vector<tournament_seeding::SeededPlayer> seeded;
+		std::vector<tournament_seeding::ExcludedPlayer> excluded;
 		if (mode == "tetrio") {
-			seeded = tournament_seeding::seed_tetrio(participants);
+			auto result = tournament_seeding::seed_tetrio_with_filters(participants, tournament->tetrio_filters);
+			seeded = std::move(result.seeded);
+			excluded = std::move(result.excluded);
 		}
 		else {
 			seeded = tournament_seeding::seed_general(participants);
@@ -658,6 +976,16 @@ namespace {
 		}
 
 		const std::string message = "Seeding complete.\n```csv\n" + csv + "```";
+		if (!excluded.empty()) {
+			std::string excluded_csv = tournament_seeding::export_excluded_csv(excluded);
+			if (excluded_csv.size() > 900) {
+				excluded_csv.resize(900);
+				excluded_csv += "\n...";
+			}
+			edit_logged(event, message + "\nExcluded by TETR.IO restrictions:\n```csv\n" + excluded_csv + "```");
+			return;
+		}
+
 		edit_logged(event, message);
 	}
 
@@ -737,7 +1065,7 @@ namespace {
 			return;
 		}
 
-		edit_logged_embed(event, tournament_discord::build_match_embed(*match));
+		edit_logged_embed(event, tournament_discord::build_match_embed(event.command.guild_id, *match));
 	}
 
 	void handle_match_report(dpp::cluster& bot, const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
@@ -946,7 +1274,7 @@ namespace {
 				continue;
 			}
 
-			tournament_discord::create_match_thread(bot, channel_id, match, include_buttons);
+			tournament_discord::create_match_thread(bot, event.command.guild_id, channel_id, match, include_buttons);
 			++queued;
 		}
 
@@ -1006,14 +1334,6 @@ namespace {
 		}
 
 		edit_logged(event, "Tournament admin role updated.");
-	}
-
-	std::string role_display(dpp::snowflake role_id) {
-		if (!role_id) {
-			return "Not configured";
-		}
-
-		return "<@&" + std::to_string(role_id) + ">";
 	}
 
 	void handle_roles(const dpp::slashcommand_t& event) {
@@ -1120,7 +1440,54 @@ namespace {
 		edit_logged(event, "Tournament format updated: " + format_display(format) + ".");
 	}
 
-	void handle_registration_open(const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
+	void handle_tetrio_restrictions(const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
+		if (!require_manage(event)) return;
+		event.thinking(false);
+
+		const int tournament_id = get_int_option(subcommand, "id");
+		if (get_bool_option(subcommand, "clear", false)) {
+			if (!tournament_manage::clear_tetrio_filters(tournament_id)) {
+				edit_logged(event, "Could not clear TETR.IO restrictions.");
+				return;
+			}
+
+			edit_logged(event, "TETR.IO restrictions cleared.");
+			return;
+		}
+
+		tournament_seeding::TetrioSeedFilters filters;
+		const std::string current_rank_min = normalize_rank(get_string_option(subcommand, "current_rank_min"));
+		const std::string current_rank_max = normalize_rank(get_string_option(subcommand, "current_rank_max"));
+		const std::string top_rank_min = normalize_rank(get_string_option(subcommand, "top_rank_min"));
+		const std::string top_rank_max = normalize_rank(get_string_option(subcommand, "top_rank_max"));
+
+		if (!valid_rank(current_rank_min) || !valid_rank(current_rank_max) || !valid_rank(top_rank_min) || !valid_rank(top_rank_max)) {
+			edit_logged(event, "Invalid TETR.IO rank restriction.");
+			return;
+		}
+
+		if (!current_rank_min.empty()) filters.current_rank_min = current_rank_min;
+		if (!current_rank_max.empty()) filters.current_rank_max = current_rank_max;
+		if (!top_rank_min.empty()) filters.top_rank_min = top_rank_min;
+		if (!top_rank_max.empty()) filters.top_rank_max = top_rank_max;
+		filters.tr_min = get_number_option(subcommand, "tr_min");
+		filters.tr_max = get_number_option(subcommand, "tr_max");
+		filters.allow_unranked = get_bool_option(subcommand, "allow_unranked", false);
+
+		if (filters.tr_min && filters.tr_max && *filters.tr_min > *filters.tr_max) {
+			edit_logged(event, "TR minimum cannot be higher than TR maximum.");
+			return;
+		}
+
+		if (!tournament_manage::set_tetrio_filters(tournament_id, filters)) {
+			edit_logged(event, "Could not update TETR.IO restrictions.");
+			return;
+		}
+
+		edit_logged(event, "TETR.IO restrictions updated:\n" + describe_tetrio_filters(filters));
+	}
+
+	void handle_registration_open(dpp::cluster& bot, const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
 		if (!require_manage(event)) return;
 		event.thinking(false);
 
@@ -1130,7 +1497,12 @@ namespace {
 			return;
 		}
 
-		edit_logged(event, "Registration opened for tournament `" + std::to_string(tournament_id) + "`.");
+		const bool panel_posted = post_registration_panel(bot, event, tournament_id);
+		edit_logged(
+			event,
+			"Registration opened for tournament `" + std::to_string(tournament_id) + "`." +
+			(panel_posted ? " Player panel posted." : " No tournament channel is configured, so no player panel was posted.")
+		);
 	}
 
 	void handle_registration_close(const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
@@ -1146,7 +1518,7 @@ namespace {
 		edit_logged(event, "Registration closed for tournament `" + std::to_string(tournament_id) + "`.");
 	}
 
-	void handle_checkin_open(const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
+	void handle_checkin_open(dpp::cluster& bot, const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
 		if (!require_manage(event)) return;
 		event.thinking(false);
 
@@ -1163,10 +1535,12 @@ namespace {
 			return;
 		}
 
+		const bool panel_posted = post_checkin_panel(bot, event, tournament_id, closes_at);
 		edit_logged(
 			event,
 			"Check-in opened for tournament `" + std::to_string(tournament_id) +
-			"` with `" + std::to_string(grace_time) + "` seconds of grace time."
+			"` with `" + std::to_string(grace_time) + "` seconds of grace time." +
+			(panel_posted ? " Player panel posted." : " No tournament channel is configured, so no player panel was posted.")
 		);
 	}
 
@@ -1302,6 +1676,7 @@ namespace {
 		if (subcommand.name == "log_channel_assign") return handle_set_tournament_log_channel(event, subcommand);
 		if (subcommand.name == "log_channel_clear") return handle_clear_tournament_log_channel(event);
 		if (subcommand.name == "set_format") return handle_set_tournament_format(event, subcommand);
+		if (subcommand.name == "tetrio_restrictions") return handle_tetrio_restrictions(event, subcommand);
 		if (subcommand.name == "ruleset_show") return handle_ruleset_show(event, subcommand);
 		if (subcommand.name == "ruleset_set_primary") return handle_ruleset_set_primary(event, subcommand);
 		if (subcommand.name == "ruleset_set_secondary") return handle_ruleset_set_secondary(event, subcommand);
@@ -1342,8 +1717,7 @@ void register_tournament_commands(dpp::cluster& bot) {
 	handlers["tournament"] = [&bot](const dpp::slashcommand_t& event) {
 		const auto interaction = event.command.get_command_interaction();
 		if (interaction.options.empty()) {
-			reply_ephemeral(event, "Choose a tournament subcommand.");
-			return;
+			return handle_dashboard(event);
 		}
 
 		const auto& subcommand = interaction.options.front();
@@ -1354,9 +1728,9 @@ void register_tournament_commands(dpp::cluster& bot) {
 		if (subcommand.name == "clear") return handle_clear(event, subcommand);
 		if (subcommand.name == "info") return handle_info(event, subcommand);
 		if (subcommand.name == "staff_info") return handle_staff_info(event, subcommand);
-		if (subcommand.name == "registration_open") return handle_registration_open(event, subcommand);
+		if (subcommand.name == "registration_open") return handle_registration_open(bot, event, subcommand);
 		if (subcommand.name == "registration_close") return handle_registration_close(event, subcommand);
-		if (subcommand.name == "checkin_open") return handle_checkin_open(event, subcommand);
+		if (subcommand.name == "checkin_open") return handle_checkin_open(bot, event, subcommand);
 		if (subcommand.name == "checkin_close") return handle_checkin_close(event, subcommand);
 		if (subcommand.name == "register") return handle_register(bot, event, subcommand);
 		if (subcommand.name == "checkin") return handle_checkin(bot, event, subcommand);
@@ -1377,12 +1751,6 @@ void register_tournament_commands(dpp::cluster& bot) {
 		if (subcommand.name == "match_svg") return handle_match_svg(event, subcommand);
 		if (subcommand.name == "config") return handle_config(event, subcommand);
 		if (subcommand.name == "bracket") return handle_bracket_group(bot, event, subcommand);
-		if (subcommand.name == "roles") return handle_roles(event);
-		if (subcommand.name == "set_staff_role") return handle_set_staff_role(event, subcommand);
-		if (subcommand.name == "set_admin_role") return handle_set_admin_role(event, subcommand);
-		if (subcommand.name == "clear_staff_role") return handle_clear_staff_role(event);
-		if (subcommand.name == "clear_admin_role") return handle_clear_admin_role(event);
-
 		reply_ephemeral(event, "Unknown tournament subcommand.");
 	};
 }

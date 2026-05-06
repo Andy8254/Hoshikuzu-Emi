@@ -70,11 +70,19 @@ std::optional<TetrioProfile> TetrioService::fetch_user(const std::string& userna
 
             profile.rating = get_double(league, "tr");
             profile.rank = get_string(league, "rank", "Z");
+            profile.top_rank = get_string(league, "bestrank", profile.rank);
 
             std::transform(
                 profile.rank.begin(),
                 profile.rank.end(),
                 profile.rank.begin(),
+                ::toupper
+            );
+
+            std::transform(
+                profile.top_rank.begin(),
+                profile.top_rank.end(),
+                profile.top_rank.begin(),
                 ::toupper
             );
 

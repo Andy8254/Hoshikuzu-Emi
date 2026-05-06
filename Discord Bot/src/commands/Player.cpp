@@ -19,14 +19,14 @@ void register_player_commands(dpp::cluster& bot) {
         dpp::snowflake user_id = event.command.usr.id;
 
         if (PlayerManager::register_info(user_id)) {
-            event.reply("✅ Profile initialized. Use `/link` to connect your Tetris accounts.");
+            event.reply(localization::message_text(event.command.guild_id, event.command.usr.id, "profile.init.ok"));
         }
         else {
             if (PlayerManager::exists(user_id)) {
-                event.reply("ℹ️ You are already registered! Use `/whois` to see your profile.");
+                event.reply(localization::message_text(event.command.guild_id, event.command.usr.id, "profile.init.exists"));
             }
             else {
-                event.reply("❌ A database error occurred. Please try again later.");
+                event.reply(localization::message_text(event.command.guild_id, event.command.usr.id, "profile.init.failed"));
             }
         }
     };
@@ -36,7 +36,7 @@ void register_player_commands(dpp::cluster& bot) {
         dpp::snowflake user_id = event.command.usr.id;
 
         if (!PlayerManager::exists(user_id)) {
-            event.reply("❌ You must `/register` before you can link accounts!");
+            event.reply(localization::message_text(event.command.guild_id, event.command.usr.id, "profile.link.requires_profile"));
             return;
         }
 
@@ -49,10 +49,15 @@ void register_player_commands(dpp::cluster& bot) {
             bool success = PlayerManager::change_info(user_id, platform + "_id", username);
 
             if (success) {
-                event.edit_response("✅ Linked " + username + " as your " + platform + " account.");
+                event.edit_response(localization::message_text(
+                    event.command.guild_id,
+                    event.command.usr.id,
+                    "profile.link.ok",
+                    { { "username", username }, { "platform", platform } }
+                ));
             }
             else {
-                event.edit_response("❌ Failed to link account. Ensure you have used `/register` first.");
+                event.edit_response(localization::message_text(event.command.guild_id, event.command.usr.id, "profile.link.failed"));
             }
             }).detach();
         };
@@ -60,10 +65,10 @@ void register_player_commands(dpp::cluster& bot) {
     // -- DELETE COMMAND --
     handlers["unlink"] = [bot_ptr](const dpp::slashcommand_t& event) {
         if (PlayerManager::delete_info(event.command.usr.id)) {
-            event.reply("🗑️ Your profile and linked accounts have been deleted.");
+            event.reply(localization::message_text(event.command.guild_id, event.command.usr.id, "profile.delete.ok"));
         }
         else {
-            event.reply("❌ No profile found to delete.");
+            event.reply(localization::message_text(event.command.guild_id, event.command.usr.id, "profile.delete.missing"));
         }
         };
 
@@ -87,7 +92,12 @@ void register_player_commands(dpp::cluster& bot) {
             target_id = PlayerManager::find_by_platform(platform, ign);
 
             if (target_id == 0) {
-                event.reply("❌ No player found with that " + platform + " name.");
+                event.reply(localization::message_text(
+                    event.command.guild_id,
+                    event.command.usr.id,
+                    "profile.show.not_found",
+                    { { "platform", platform } }
+                ));
                 return;
             }
         }
@@ -103,7 +113,7 @@ void register_player_commands(dpp::cluster& bot) {
         std::string platform = std::get<std::string>(event.get_parameter("platform"));
 
         if (PlayerManager::not_found(user_id)) {
-            event.reply("❌ You don't have a profile! Use `/register` first.");
+            event.reply(localization::message_text(event.command.guild_id, event.command.usr.id, "profile.unlink.requires_profile"));
             return;
         }
 
@@ -112,10 +122,15 @@ void register_player_commands(dpp::cluster& bot) {
             std::string display = platform;
             if (display.find("_id") != std::string::npos) display.erase(display.find("_id"));
 
-            event.reply("🗑️ Successfully unlinked your " + display + " account.");
+            event.reply(localization::message_text(
+                event.command.guild_id,
+                event.command.usr.id,
+                "profile.unlink.ok",
+                { { "platform", display } }
+            ));
         }
         else {
-            event.reply("❌ Failed to unlink. You might not have that platform connected.");
+            event.reply(localization::message_text(event.command.guild_id, event.command.usr.id, "profile.unlink.failed"));
         }
     };
 
@@ -124,7 +139,7 @@ void register_player_commands(dpp::cluster& bot) {
 
         if (language == "none") {
             if (!UserSettingsManager::clear_language(event.command.usr.id)) {
-                event.reply(dpp::message("Could not update your language preference.").set_flags(dpp::m_ephemeral));
+                event.reply(dpp::message(localization::user_text(event.command.guild_id, event.command.usr.id, "profile.language.update_failed")).set_flags(dpp::m_ephemeral));
                 return;
             }
 
@@ -150,7 +165,7 @@ void register_player_commands(dpp::cluster& bot) {
         }
 
         if (!UserSettingsManager::set_language(event.command.usr.id, language)) {
-            event.reply(dpp::message("Could not update your language preference.").set_flags(dpp::m_ephemeral));
+            event.reply(dpp::message(localization::user_text(event.command.guild_id, event.command.usr.id, "profile.language.update_failed")).set_flags(dpp::m_ephemeral));
             return;
         }
 
@@ -162,5 +177,39 @@ void register_player_commands(dpp::cluster& bot) {
                 { { "language", language } }
             )).set_flags(dpp::m_ephemeral)
         );
+    };
+
+    handlers["profile"] = [](const dpp::slashcommand_t& event) {
+        const auto interaction = event.command.get_command_interaction();
+        if (interaction.options.empty()) {
+            event.reply(dpp::message(localization::user_text(event.command.guild_id, event.command.usr.id, "profile.choose_subcommand")).set_flags(dpp::m_ephemeral));
+            return;
+        }
+
+        const std::string& subcommand = interaction.options.front().name;
+        std::string target;
+        if (subcommand == "init") {
+            target = "register";
+        }
+        else if (subcommand == "show") {
+            target = "whois";
+        }
+        else if (subcommand == "delete") {
+            target = "unlink";
+        }
+        else if (subcommand == "unlink") {
+            target = "unlink_platform";
+        }
+        else {
+            target = subcommand;
+        }
+
+        const auto it = handlers.find(target);
+        if (it != handlers.end()) {
+            it->second(event);
+            return;
+        }
+
+        event.reply(dpp::message(localization::user_text(event.command.guild_id, event.command.usr.id, "profile.unknown_subcommand")).set_flags(dpp::m_ephemeral));
     };
 }

@@ -142,6 +142,7 @@ struct ModerationCase {
 class ModerationManager {
 public:
 	static bool init();
+	static bool encryption_enabled();
 	static std::optional<int> create_case(
 		dpp::snowflake guild_id,
 		dpp::snowflake target_id,

@@ -2,6 +2,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include "tournament/seeding.hpp"
 
 namespace tournament_manage {
 	struct TournamentRecord {
@@ -14,6 +15,7 @@ namespace tournament_manage {
 		bool checkin_open = false;
 		int checkin_closes_at = 0;
 		int checkin_grace_time = 600;
+		tournament_seeding::TetrioSeedFilters tetrio_filters;
 	};
 
 	struct TournamentUpdate {
@@ -36,6 +38,8 @@ namespace tournament_manage {
 	bool delete_tournament(int tournament_id);
 	bool clear_all_tournament_data();
 	bool set_tournament_format(int tournament_id, const std::string& format);
+	bool set_tetrio_filters(int tournament_id, const tournament_seeding::TetrioSeedFilters& filters);
+	bool clear_tetrio_filters(int tournament_id);
 	bool set_registration_open(int tournament_id, bool is_open);
 	bool set_checkin_open(int tournament_id, bool is_open, int closes_at, int grace_time);
 

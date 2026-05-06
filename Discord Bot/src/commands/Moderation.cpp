@@ -40,6 +40,39 @@ namespace {
 		event.reply(dpp::message(content).set_flags(dpp::m_ephemeral));
 	}
 
+	dpp::component dashboard_buttons() {
+		dpp::component actions;
+		actions.add_component(
+			dpp::component()
+			.set_label("Moderation help")
+			.set_id("staffdash:moderation:help:0")
+			.set_style(dpp::cos_secondary)
+		).add_component(
+			dpp::component()
+			.set_label("Settings help")
+			.set_id("staffdash:settings:help:0")
+			.set_style(dpp::cos_secondary)
+		);
+		return actions;
+	}
+
+	void handle_dashboard(const dpp::slashcommand_t& event) {
+		if (!is_mod(event)) {
+			return reply_ephemeral(event, "You need moderator permission to open the moderation dashboard.");
+		}
+
+		const dpp::snowflake modlog_channel = ServerSettingsManager::get_modlog_channel(event.command.guild_id);
+		dpp::embed embed = dpp::embed()
+			.set_title("Moderation Dashboard")
+			.set_description("Staff-only overview for moderation actions and audit logging.")
+			.set_color(0xc07070)
+			.add_field("Routine actions", "`/mod history`, `/mod warn`, `/mod note`", false)
+			.add_field("Live actions", "`/mod timeout`, `/mod clear_timeout`, `/mod kick`, `/mod ban`, `/mod unban`", false)
+			.add_field("Moderation log", modlog_channel ? "<#" + std::to_string(modlog_channel) + ">" : "Not configured", true);
+
+		event.reply(dpp::message().add_embed(embed).add_component(dashboard_buttons()).set_flags(dpp::m_ephemeral));
+	}
+
 	const dpp::command_data_option* find_option(const dpp::command_data_option& parent, const std::string& name) {
 		for (const auto& option : parent.options) {
 			if (option.name == name) return &option;
@@ -233,7 +266,7 @@ namespace {
 void register_moderation_commands(dpp::cluster& bot) {
 	handlers["mod"] = [&bot](const dpp::slashcommand_t& event) {
 		const auto interaction = event.command.get_command_interaction();
-		if (interaction.options.empty()) return reply_ephemeral(event, "Choose a moderation subcommand.");
+		if (interaction.options.empty()) return handle_dashboard(event);
 		const auto& subcommand = interaction.options.front();
 
 		if (subcommand.name == "warn") return handle_warn(bot, event, subcommand);

@@ -69,26 +69,69 @@ namespace {
 		return role_id ? "<@&" + std::to_string(role_id) + ">" : "Not configured";
 	}
 
+	std::string secondary_language_display(const std::string& language) {
+		if (language.empty()) {
+			return "None";
+		}
+
+		if (language == localization::DEFAULT_SECONDARY_SENTINEL) {
+			return std::string("Default (") + localization::DEFAULT_SECONDARY_LANGUAGE + ")";
+		}
+
+		return language;
+	}
+
+	dpp::embed build_settings_embed(const dpp::slashcommand_t& event) {
+		const dpp::snowflake guild_id = event.command.guild_id;
+		return dpp::embed()
+			.set_title("Server Settings")
+			.set_color(0x7aa2f7)
+			.add_field("Developer", "<@543676141177798676>", true)
+			.add_field("Owner", ServerSettingsManager::get_owner(guild_id) ? "<@" + std::to_string(ServerSettingsManager::get_owner(guild_id)) + ">" : "Not assigned", true)
+			.add_field("Language", ServerSettingsManager::get_language(guild_id), true)
+			.add_field("Secondary language", secondary_language_display(ServerSettingsManager::get_secondary_language(guild_id)), true)
+			.add_field("Admin role", role_display(ServerSettingsManager::get_admin_role(guild_id)), true)
+			.add_field("Moderator role", role_display(ServerSettingsManager::get_moderator_role(guild_id)), true)
+			.add_field("Staff role", role_display(ServerSettingsManager::get_staff_role(guild_id)), true)
+			.add_field("Moderation log", ServerSettingsManager::get_modlog_channel(guild_id) ? "<#" + std::to_string(ServerSettingsManager::get_modlog_channel(guild_id)) + ">" : "Not configured", true);
+	}
+
+	dpp::component dashboard_buttons() {
+		dpp::component actions;
+		actions.add_component(
+			dpp::component()
+			.set_label("Settings help")
+			.set_id("staffdash:settings:help:0")
+			.set_style(dpp::cos_secondary)
+		).add_component(
+			dpp::component()
+			.set_label("Moderation help")
+			.set_id("staffdash:moderation:help:0")
+			.set_style(dpp::cos_secondary)
+		);
+		return actions;
+	}
+
+	void handle_dashboard(const dpp::slashcommand_t& event) {
+		if (!is_settings_moderator(event)) {
+			reply_ephemeral(event, localization::user_text(event.command.guild_id, event.command.usr.id, "settings.permission.staff"));
+			return;
+		}
+
+		dpp::embed embed = build_settings_embed(event)
+			.set_title("Settings Dashboard")
+			.set_description("Configuration snapshot for server language, staff roles, and moderation logging.");
+
+		event.reply(dpp::message().add_embed(embed).add_component(dashboard_buttons()).set_flags(dpp::m_ephemeral));
+	}
+
 	void handle_show(const dpp::slashcommand_t& event) {
 		if (!is_settings_moderator(event)) {
 			reply_ephemeral(event, localization::user_text(event.command.guild_id, event.command.usr.id, "settings.permission.staff"));
 			return;
 		}
 
-		const dpp::snowflake guild_id = event.command.guild_id;
-		dpp::embed embed = dpp::embed()
-			.set_title("Server Settings")
-			.set_color(0x7aa2f7)
-			.add_field("Developer", "<@543676141177798676>", true)
-			.add_field("Owner", ServerSettingsManager::get_owner(guild_id) ? "<@" + std::to_string(ServerSettingsManager::get_owner(guild_id)) + ">" : "Not assigned", true)
-			.add_field("Language", ServerSettingsManager::get_language(guild_id), true)
-			.add_field("Secondary language", ServerSettingsManager::get_secondary_language(guild_id).empty() ? "None" : ServerSettingsManager::get_secondary_language(guild_id), true)
-			.add_field("Admin role", role_display(ServerSettingsManager::get_admin_role(guild_id)), true)
-			.add_field("Moderator role", role_display(ServerSettingsManager::get_moderator_role(guild_id)), true)
-			.add_field("Staff role", role_display(ServerSettingsManager::get_staff_role(guild_id)), true)
-			.add_field("Moderation log", ServerSettingsManager::get_modlog_channel(guild_id) ? "<#" + std::to_string(ServerSettingsManager::get_modlog_channel(guild_id)) + ">" : "Not configured", true);
-
-		event.reply(dpp::message().add_embed(embed));
+		event.reply(dpp::message().add_embed(build_settings_embed(event)));
 	}
 
 	void handle_set_admin_role(const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
@@ -173,7 +216,7 @@ namespace {
 			return;
 		}
 
-		if (!localization::is_supported_language(language)) {
+		if (language != localization::DEFAULT_SECONDARY_SENTINEL && !localization::is_supported_language(language)) {
 			reply_ephemeral(event, localization::user_text(event.command.guild_id, event.command.usr.id, "settings.language.unsupported"));
 			return;
 		}
@@ -220,8 +263,7 @@ void register_settings_commands(dpp::cluster& bot) {
 	handlers["settings"] = [](const dpp::slashcommand_t& event) {
 		const auto interaction = event.command.get_command_interaction();
 		if (interaction.options.empty()) {
-			reply_ephemeral(event, localization::user_text(event.command.guild_id, event.command.usr.id, "settings.unknown"));
-			return;
+			return handle_dashboard(event);
 		}
 
 		const auto& subcommand = interaction.options.front();

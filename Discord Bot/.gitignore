@@ -11,3 +11,6 @@ Release/
 .vs/
 *.vcxproj.user
 db/*.db
+db/*.db-shm
+db/*.db-wal
+db/*.db.bak

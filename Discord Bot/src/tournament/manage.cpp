@@ -34,6 +34,19 @@ namespace {
 		record.checkin_open = sqlite3_column_int(stmt, 6) != 0;
 		record.checkin_closes_at = sqlite3_column_int(stmt, 7);
 		record.checkin_grace_time = sqlite3_column_int(stmt, 8);
+		const std::string current_rank_min = column_text(stmt, 9);
+		const std::string current_rank_max = column_text(stmt, 10);
+		const std::string top_rank_min = column_text(stmt, 11);
+		const std::string top_rank_max = column_text(stmt, 12);
+		const double tr_min = sqlite3_column_double(stmt, 13);
+		const double tr_max = sqlite3_column_double(stmt, 14);
+		record.tetrio_filters.allow_unranked = sqlite3_column_int(stmt, 15) != 0;
+		if (!current_rank_min.empty()) record.tetrio_filters.current_rank_min = current_rank_min;
+		if (!current_rank_max.empty()) record.tetrio_filters.current_rank_max = current_rank_max;
+		if (!top_rank_min.empty()) record.tetrio_filters.top_rank_min = top_rank_min;
+		if (!top_rank_max.empty()) record.tetrio_filters.top_rank_max = top_rank_max;
+		if (tr_min >= 0.0) record.tetrio_filters.tr_min = tr_min;
+		if (tr_max >= 0.0) record.tetrio_filters.tr_max = tr_max;
 		return record;
 	}
 
@@ -60,7 +73,14 @@ bool tournament_manage::init() {
 		"registration_open INTEGER DEFAULT 0, "
 		"checkin_open INTEGER DEFAULT 0, "
 		"checkin_closes_at INTEGER DEFAULT 0, "
-		"checkin_grace_time INTEGER DEFAULT 600"
+		"checkin_grace_time INTEGER DEFAULT 600, "
+		"tetrio_current_rank_min TEXT, "
+		"tetrio_current_rank_max TEXT, "
+		"tetrio_top_rank_min TEXT, "
+		"tetrio_top_rank_max TEXT, "
+		"tetrio_tr_min REAL DEFAULT -1, "
+		"tetrio_tr_max REAL DEFAULT -1, "
+		"tetrio_allow_unranked INTEGER DEFAULT 0"
 		");";
 
 	if (!get_db().execute(sql)) {
@@ -72,7 +92,14 @@ bool tournament_manage::init() {
 		"registration_open INTEGER DEFAULT 0",
 		"checkin_open INTEGER DEFAULT 0",
 		"checkin_closes_at INTEGER DEFAULT 0",
-		"checkin_grace_time INTEGER DEFAULT 600"
+		"checkin_grace_time INTEGER DEFAULT 600",
+		"tetrio_current_rank_min TEXT",
+		"tetrio_current_rank_max TEXT",
+		"tetrio_top_rank_min TEXT",
+		"tetrio_top_rank_max TEXT",
+		"tetrio_tr_min REAL DEFAULT -1",
+		"tetrio_tr_max REAL DEFAULT -1",
+		"tetrio_allow_unranked INTEGER DEFAULT 0"
 	};
 
 	for (const char* migration : migrations) {
@@ -284,6 +311,41 @@ bool tournament_manage::set_tournament_format(int tournament_id, const std::stri
 	return success;
 }
 
+bool tournament_manage::set_tetrio_filters(int tournament_id, const tournament_seeding::TetrioSeedFilters& filters) {
+	if (tournament_id <= 0 || !init()) {
+		return false;
+	}
+
+	sqlite3_stmt* stmt = nullptr;
+	const char* sql =
+		"UPDATE tournaments "
+		"SET tetrio_current_rank_min = ?, tetrio_current_rank_max = ?, "
+		"tetrio_top_rank_min = ?, tetrio_top_rank_max = ?, "
+		"tetrio_tr_min = ?, tetrio_tr_max = ?, tetrio_allow_unranked = ? "
+		"WHERE id = ?;";
+
+	if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+		return false;
+	}
+
+	bind_text(stmt, 1, filters.current_rank_min.value_or(""));
+	bind_text(stmt, 2, filters.current_rank_max.value_or(""));
+	bind_text(stmt, 3, filters.top_rank_min.value_or(""));
+	bind_text(stmt, 4, filters.top_rank_max.value_or(""));
+	sqlite3_bind_double(stmt, 5, filters.tr_min.value_or(-1.0));
+	sqlite3_bind_double(stmt, 6, filters.tr_max.value_or(-1.0));
+	sqlite3_bind_int(stmt, 7, filters.allow_unranked ? 1 : 0);
+	sqlite3_bind_int(stmt, 8, tournament_id);
+
+	const bool success = sqlite3_step(stmt) == SQLITE_DONE && sqlite3_changes(get_db().get_handle()) > 0;
+	sqlite3_finalize(stmt);
+	return success;
+}
+
+bool tournament_manage::clear_tetrio_filters(int tournament_id) {
+	return set_tetrio_filters(tournament_id, {});
+}
+
 bool tournament_manage::set_registration_open(int tournament_id, bool is_open) {
 	if (tournament_id <= 0 || !init()) {
 		return false;
@@ -346,7 +408,8 @@ std::optional<tournament_manage::TournamentRecord> tournament_manage::get_tourna
 
 	sqlite3_stmt* stmt = nullptr;
 	const char* sql =
-		"SELECT id, name, game_type, format, status, registration_open, checkin_open, checkin_closes_at, checkin_grace_time "
+		"SELECT id, name, game_type, format, status, registration_open, checkin_open, checkin_closes_at, checkin_grace_time, "
+		"tetrio_current_rank_min, tetrio_current_rank_max, tetrio_top_rank_min, tetrio_top_rank_max, tetrio_tr_min, tetrio_tr_max, tetrio_allow_unranked "
 		"FROM tournaments "
 		"WHERE id = ? "
 		"LIMIT 1;";
@@ -374,7 +437,8 @@ std::vector<tournament_manage::TournamentRecord> tournament_manage::list_tournam
 
 	sqlite3_stmt* stmt = nullptr;
 	const char* sql =
-		"SELECT id, name, game_type, format, status, registration_open, checkin_open, checkin_closes_at, checkin_grace_time "
+		"SELECT id, name, game_type, format, status, registration_open, checkin_open, checkin_closes_at, checkin_grace_time, "
+		"tetrio_current_rank_min, tetrio_current_rank_max, tetrio_top_rank_min, tetrio_top_rank_max, tetrio_tr_min, tetrio_tr_max, tetrio_allow_unranked "
 		"FROM tournaments "
 		"ORDER BY id DESC;";
 
@@ -398,7 +462,8 @@ std::vector<tournament_manage::TournamentRecord> tournament_manage::list_tournam
 
 	sqlite3_stmt* stmt = nullptr;
 	const char* sql =
-		"SELECT id, name, game_type, format, status, registration_open, checkin_open, checkin_closes_at, checkin_grace_time "
+		"SELECT id, name, game_type, format, status, registration_open, checkin_open, checkin_closes_at, checkin_grace_time, "
+		"tetrio_current_rank_min, tetrio_current_rank_max, tetrio_top_rank_min, tetrio_top_rank_max, tetrio_tr_min, tetrio_tr_max, tetrio_allow_unranked "
 		"FROM tournaments "
 		"WHERE status = ? "
 		"ORDER BY id DESC;";

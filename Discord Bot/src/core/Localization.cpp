@@ -160,6 +160,10 @@ std::string localization::primary_language(dpp::snowflake guild_id, dpp::snowfla
 
 std::string localization::secondary_language(dpp::snowflake guild_id) {
 	const std::string language = ServerSettingsManager::get_secondary_language(guild_id);
+	if (language == DEFAULT_SECONDARY_SENTINEL) {
+		return is_supported_language(DEFAULT_SECONDARY_LANGUAGE) ? DEFAULT_SECONDARY_LANGUAGE : "";
+	}
+
 	return is_supported_language(language) ? language : "";
 }
 
@@ -226,4 +230,19 @@ std::string localization::message_text(dpp::snowflake guild_id, dpp::snowflake u
 
 std::string localization::embed_text(dpp::snowflake guild_id, const std::string& key, const Params& params) {
 	return text(guild_language(guild_id), key, params);
+}
+
+std::string localization::shared_embed_text(dpp::snowflake guild_id, const std::string& key, const Params& params) {
+	const std::string primary = guild_language(guild_id);
+	std::string result = text(primary, key, params);
+
+	const std::string secondary = secondary_language(guild_id);
+	if (!secondary.empty() && secondary != primary) {
+		const std::string secondary_value = text_or_empty(secondary, key, params);
+		if (!secondary_value.empty() && secondary_value != result) {
+			result += "\n" + secondary_value;
+		}
+	}
+
+	return result;
 }

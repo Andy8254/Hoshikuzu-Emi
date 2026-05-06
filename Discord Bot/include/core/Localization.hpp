@@ -7,6 +7,8 @@ namespace localization {
 	using Params = std::map<std::string, std::string>;
 
 	inline constexpr const char* DEFAULT_LANGUAGE = "EN-gb";
+	inline constexpr const char* DEFAULT_SECONDARY_LANGUAGE = "KO-kr";
+	inline constexpr const char* DEFAULT_SECONDARY_SENTINEL = "default";
 
 	bool init();
 	bool is_supported_language(const std::string& language);
@@ -20,4 +22,5 @@ namespace localization {
 	std::string user_text(dpp::snowflake guild_id, dpp::snowflake user_id, const std::string& key, const Params& params = {});
 	std::string message_text(dpp::snowflake guild_id, dpp::snowflake user_id, const std::string& key, const Params& params = {});
 	std::string embed_text(dpp::snowflake guild_id, const std::string& key, const Params& params = {});
+	std::string shared_embed_text(dpp::snowflake guild_id, const std::string& key, const Params& params = {});
 }

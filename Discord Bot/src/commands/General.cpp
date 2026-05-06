@@ -1,5 +1,47 @@
 #include "core/CommandRegistry.hpp"
+#include "core/Localization.hpp"
 #include "core/Markdown.hpp"
+#include <algorithm>
+#include <cctype>
+
+namespace {
+	std::string normalize_help_token(std::string value) {
+		std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+			if (c == '-') {
+				return static_cast<char>('_');
+			}
+
+			return static_cast<char>(std::tolower(c));
+		});
+
+		std::string normalized;
+		for (const char c : value) {
+			if (std::isalnum(static_cast<unsigned char>(c)) || c == '_') {
+				normalized.push_back(c);
+			}
+		}
+
+		return normalized;
+	}
+
+	std::string help_path(const std::string& language, const std::string& module, const std::string& command) {
+		return "resources/help/" + language + "/" + module + "/" + command + ".md";
+	}
+
+	std::string read_help_file(const std::string& language, const std::string& module, const std::string& command) {
+		const std::string localized_path = help_path(language, module, command);
+		std::string content = md::read_file(localized_path);
+		if (!content.empty()) {
+			return content;
+		}
+
+		if (language != localization::DEFAULT_LANGUAGE) {
+			return md::read_file(help_path(localization::DEFAULT_LANGUAGE, module, command));
+		}
+
+		return "";
+	}
+}
 
 //General Section, even though this will be a FAQ section since the basic commands were already registered in Fundamentals.cpp...
 void register_general_commands(dpp::cluster& bot) {
@@ -10,59 +52,41 @@ void register_general_commands(dpp::cluster& bot) {
 		std::string category, command;
 		auto cat_param = event.get_parameter("category");
 
-		//Debug Code
-		std::cout << "category index = " << event.get_parameter("category").index() << "\n";
-		std::cout << "category = [" << category << "]\n";
-
 		if (std::holds_alternative<std::string>(cat_param)) {
 			category = std::get<std::string>(event.get_parameter("category"));
 		}
 
 		auto cmd_param = event.get_parameter("command");
 
-		//Debug Code
-		std::cout << "command index = " << event.get_parameter("command").index() << "\n";
-		std::cout << "command = [" << command << "]\n";
-
 		if (std::holds_alternative<std::string>(cmd_param)) {
 			command = std::get<std::string>(event.get_parameter("command"));
 		}
 
-		std::transform(category.begin(), category.end(), category.begin(), ::tolower);
-		std::transform(command.begin(), command.end(), command.begin(), ::tolower);
+		category = normalize_help_token(category);
+		command = normalize_help_token(command);
+		const std::string language = localization::primary_language(event.command.guild_id, event.command.usr.id);
 
 		if (category.empty()) {
-			dpp::embed help_embed = dpp::embed()
-				.set_title("Help Menu")
-				.set_description("Select a category to view commands.")
-				.set_thumbnail(bot_ptr->me.get_avatar_url())
-				.set_color(0xB0D28F)
-				.add_field("Basic", "`/codex fundamentals`", true)
-				.add_field("General", "`/codex general`", true)
-				.add_field("Player", "`/codex player`", true)
-				.add_field("TETR.IO", "`/codex tetrio`", true)
-				.add_field("Brackets", "`/codex brackets`", true)
-				.add_field("Tournament", "`/codex tournament`", true)
-				.add_field("Settings", "`/codex settings`", true)
-				.add_field("Moderation", "`/codex moderation`", true)
-				.add_field("Miscellaneous", "`/codex misc`", true)
-				.set_footer(dpp::embed_footer().set_text("Use /codex [category] for more information on commands in that category."))
-				.set_timestamp(time(0));
+			std::string content = read_help_file(language, "bot", "list");
+			if (content.empty()) {
+				event.reply(localization::message_text(event.command.guild_id, event.command.usr.id, "help.unavailable"));
+				return;
+			}
 
-			event.reply(dpp::message().add_embed(help_embed));
+			auto msg = md::to_message(content);
+			if (!msg.embeds.empty()) {
+				msg.embeds[0].set_thumbnail(bot_ptr->me.get_avatar_url()).set_timestamp(time(0));
+			}
+
+			event.reply(msg);
 			return;
 		}
 
 		if (command.empty()) {
-			std::string path = "resources/help/" + category + "/list.md";
-			std::string content = md::read_file(path);
-
-			//Debug Code
-			std::cout << "path = " << path << "\n";
-			std::cout << "content length = " << content.size() << "\n";
+			std::string content = read_help_file(language, category, "list");
 
 			if (content.empty()) {
-				event.reply("Category not found. Please check your spelling and try again.");
+				event.reply(localization::message_text(event.command.guild_id, event.command.usr.id, "help.category_not_found"));
 				return;
 			}
 
@@ -75,15 +99,10 @@ void register_general_commands(dpp::cluster& bot) {
 			return;
 		}
 
-		std::string path = "resources/help/" + category + "/" + command + ".md";
-		std::string content = md::read_file(path);
-
-		//Debug Code
-		std::cout << "path = " << path << "\n";
-		std::cout << "content length = " << content.size() << "\n";
+		std::string content = read_help_file(language, category, command);
 
 		if (content.empty()) {
-			event.reply("Command not found. Please check your spelling and try again.");
+			event.reply(localization::message_text(event.command.guild_id, event.command.usr.id, "help.command_not_found"));
 			return;
 		}
 

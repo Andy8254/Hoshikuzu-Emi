@@ -1,12 +1,13 @@
 #include "core/CommandRegistry.hpp"
 #include "core/Fundamentals.hpp"
+#include "core/Localization.hpp"
 
 //Register all command handlers here (This will include hundreds, or even thousands of command handlers, so it's best to keep them organized in a separate file like this)
 void register_fundamental_commands(dpp::cluster& bot) {
     auto bot_ptr = &bot;
 
     handlers["ping"] = [](const dpp::slashcommand_t& event) {
-        event.reply("Pong!");
+        event.reply(localization::message_text(event.command.guild_id, event.command.usr.id, "bot.ping"));
         };
 
     handlers["info"] = [bot_ptr](const dpp::slashcommand_t& event) {
@@ -47,5 +48,23 @@ void register_fundamental_commands(dpp::cluster& bot) {
             "\n"
             "Full details: https://github.com/Andy8254/Hoshikuzu-Emi/blob/master/Discord%20Bot/resources/legal/terms.md"
         );
+    };
+
+    handlers["bot"] = [](const dpp::slashcommand_t& event) {
+        const auto interaction = event.command.get_command_interaction();
+        if (interaction.options.empty()) {
+            event.reply(dpp::message(localization::user_text(event.command.guild_id, event.command.usr.id, "bot.choose_subcommand")).set_flags(dpp::m_ephemeral));
+            return;
+        }
+
+        const std::string& subcommand = interaction.options.front().name;
+        const std::string target = subcommand == "help" ? "codex" : subcommand;
+        const auto it = handlers.find(target);
+        if (it != handlers.end()) {
+            it->second(event);
+            return;
+        }
+
+        event.reply(dpp::message(localization::user_text(event.command.guild_id, event.command.usr.id, "bot.unknown_subcommand")).set_flags(dpp::m_ephemeral));
     };
 }
