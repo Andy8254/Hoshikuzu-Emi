@@ -27,6 +27,17 @@ namespace tournament_registration {
 		int checked_in_at = 0;
 	};
 
+	struct RatingRecord {
+		int tournament_id = 0;
+		std::string discord_id;
+		std::string rating_bucket;
+		double rating_points = 0.0;
+		std::string source;
+		std::string updated_by;
+		int updated_at = 0;
+		std::string note;
+	};
+
 	struct RegistrationRequest {
 		int tournament_id = 0;
 		std::string discord_id;
@@ -61,10 +72,23 @@ namespace tournament_registration {
 	ParticipantResult undo_check_in(int tournament_id, const std::string& discord_id);
 	bool set_participant_seed(int tournament_id, const std::string& discord_id, int seed);
 	bool set_participant_status(int tournament_id, const std::string& discord_id, ParticipantStatus status);
+	bool set_participant_rating(
+		int tournament_id,
+		const std::string& discord_id,
+		const std::string& rating_bucket,
+		double rating_points,
+		const std::string& source,
+		const std::string& updated_by,
+		int updated_at,
+		const std::string& note = ""
+	);
+	bool clear_participant_rating(int tournament_id, const std::string& discord_id, const std::string& rating_bucket);
 
 	std::optional<ParticipantRecord> get_participant(int tournament_id, const std::string& discord_id);
+	std::optional<RatingRecord> get_participant_rating(int tournament_id, const std::string& discord_id, const std::string& rating_bucket);
 	std::vector<ParticipantRecord> list_participants(int tournament_id);
 	std::vector<ParticipantRecord> list_checked_in_participants(int tournament_id);
+	std::vector<RatingRecord> list_ratings(int tournament_id, const std::string& rating_bucket = "");
 
 	std::string status_to_string(ParticipantStatus status);
 	ParticipantStatus status_from_string(const std::string& status);

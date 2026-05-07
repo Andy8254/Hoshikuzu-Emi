@@ -67,6 +67,19 @@ namespace {
             .add_choice(dpp::command_option_choice("D", "D"))
             .add_choice(dpp::command_option_choice("Unranked", "Z"));
     }
+
+    dpp::command_option& add_rating_bucket_choices(dpp::command_option& option) {
+        return option
+            .add_choice(dpp::command_option_choice("TE:C Overall", "tec_overall"))
+            .add_choice(dpp::command_option_choice("TE:C Connected VS", "tec_connected_vs"))
+            .add_choice(dpp::command_option_choice("TE:C Zone Battle", "tec_zone_battle"))
+            .add_choice(dpp::command_option_choice("TE:C Score Attack", "tec_score_attack"))
+            .add_choice(dpp::command_option_choice("TE:C Classic Score Attack", "tec_classic_score_attack"))
+            .add_choice(dpp::command_option_choice("PPT2 Puzzle", "ppt2_puzzle"))
+            .add_choice(dpp::command_option_choice("PPT2 Puyo Puyo", "ppt2_puyo_puyo"))
+            .add_choice(dpp::command_option_choice("PPT2 Tetris", "ppt2_tetris"))
+            .add_choice(dpp::command_option_choice("General Single Rank Point", "general_single_rank_point"));
+    }
 }
 
 void register_discord_commands(dpp::cluster& bot, dpp::snowflake mod_channel_id) {
@@ -292,7 +305,10 @@ void register_discord_commands(dpp::cluster& bot, dpp::snowflake mod_channel_id)
             seed.add_option(dpp::command_option(dpp::co_integer, "id", "Tournament ID", true));
             seed.add_option(dpp::command_option(dpp::co_string, "mode", "Seeding mode", false)
                 .add_choice(dpp::command_option_choice("General", "general"))
-                .add_choice(dpp::command_option_choice("TETR.IO", "tetrio")));
+                .add_choice(dpp::command_option_choice("TETR.IO", "tetrio"))
+                .add_choice(dpp::command_option_choice("Manual Rating", "rating")));
+            dpp::command_option seed_bucket(dpp::co_string, "bucket", "Manual rating bucket for rating seeding", false);
+            seed.add_option(add_rating_bucket_choices(seed_bucket));
             tournament.add_option(seed);
 
             dpp::command_option bracket(dpp::co_sub_command_group, "bracket", "Bracket and match operations");
@@ -432,6 +448,28 @@ void register_discord_commands(dpp::cluster& bot, dpp::snowflake mod_channel_id)
             tetrio_restrictions.add_option(dpp::command_option(dpp::co_boolean, "allow_unranked", "Allow unranked players; TR still affects seeding when present", false));
             tetrio_restrictions.add_option(dpp::command_option(dpp::co_boolean, "clear", "Clear all TETR.IO restrictions", false));
             config.add_option(tetrio_restrictions);
+
+            dpp::command_option rating_set(dpp::co_sub_command, "rating_set", "Set manual rating points for a participant");
+            rating_set.add_option(dpp::command_option(dpp::co_integer, "id", "Tournament ID", true));
+            rating_set.add_option(dpp::command_option(dpp::co_user, "user", "Participant", true));
+            dpp::command_option rating_set_bucket(dpp::co_string, "bucket", "Rating bucket", true);
+            rating_set.add_option(add_rating_bucket_choices(rating_set_bucket));
+            rating_set.add_option(dpp::command_option(dpp::co_number, "points", "Manual rating points", true));
+            rating_set.add_option(dpp::command_option(dpp::co_string, "note", "Staff note", false));
+            config.add_option(rating_set);
+
+            dpp::command_option rating_clear(dpp::co_sub_command, "rating_clear", "Clear manual rating points for a participant");
+            rating_clear.add_option(dpp::command_option(dpp::co_integer, "id", "Tournament ID", true));
+            rating_clear.add_option(dpp::command_option(dpp::co_user, "user", "Participant", true));
+            dpp::command_option rating_clear_bucket(dpp::co_string, "bucket", "Rating bucket", true);
+            rating_clear.add_option(add_rating_bucket_choices(rating_clear_bucket));
+            config.add_option(rating_clear);
+
+            dpp::command_option rating_list(dpp::co_sub_command, "rating_list", "List manual ratings for a tournament");
+            rating_list.add_option(dpp::command_option(dpp::co_integer, "id", "Tournament ID", true));
+            dpp::command_option rating_list_bucket(dpp::co_string, "bucket", "Rating bucket", false);
+            rating_list.add_option(add_rating_bucket_choices(rating_list_bucket));
+            config.add_option(rating_list);
 
             dpp::command_option ruleset_show(dpp::co_sub_command, "ruleset_show", "Show tournament rulesets");
             ruleset_show.add_option(dpp::command_option(dpp::co_integer, "id", "Tournament ID", true));

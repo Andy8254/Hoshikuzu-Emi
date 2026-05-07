@@ -48,6 +48,19 @@ namespace {
 		return record;
 	}
 
+	tournament_registration::RatingRecord read_rating(sqlite3_stmt* stmt) {
+		tournament_registration::RatingRecord record;
+		record.tournament_id = sqlite3_column_int(stmt, 0);
+		record.discord_id = column_text(stmt, 1);
+		record.rating_bucket = column_text(stmt, 2);
+		record.rating_points = sqlite3_column_double(stmt, 3);
+		record.source = column_text(stmt, 4);
+		record.updated_by = column_text(stmt, 5);
+		record.updated_at = sqlite3_column_int(stmt, 6);
+		record.note = column_text(stmt, 7);
+		return record;
+	}
+
 	tournament_registration::ParticipantResult fail(const std::string& message) {
 		return tournament_registration::ParticipantResult{ false, message, std::nullopt };
 	}
@@ -61,7 +74,7 @@ namespace {
 }
 
 bool tournament_registration::init() {
-	const char* sql =
+	const char* participants_sql =
 		"CREATE TABLE IF NOT EXISTS tournament_participants ("
 		"tournament_id INTEGER NOT NULL, "
 		"discord_id TEXT NOT NULL, "
@@ -76,7 +89,22 @@ bool tournament_registration::init() {
 		"FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE"
 		");";
 
-	return get_db().execute(sql)
+	const char* ratings_sql =
+		"CREATE TABLE IF NOT EXISTS tournament_participant_ratings ("
+		"tournament_id INTEGER NOT NULL, "
+		"discord_id TEXT NOT NULL, "
+		"rating_bucket TEXT NOT NULL, "
+		"rating_points REAL NOT NULL, "
+		"source TEXT DEFAULT 'staff', "
+		"updated_by TEXT, "
+		"updated_at INTEGER DEFAULT 0, "
+		"note TEXT DEFAULT '', "
+		"PRIMARY KEY (tournament_id, discord_id, rating_bucket), "
+		"FOREIGN KEY (tournament_id, discord_id) REFERENCES tournament_participants(tournament_id, discord_id) ON DELETE CASCADE"
+		");";
+
+	return get_db().execute(participants_sql)
+		&& get_db().execute(ratings_sql)
 		&& get_db().create_index_if_missing(
 			"idx_tournament_participants_tournament_status",
 			"tournament_participants",
@@ -86,6 +114,11 @@ bool tournament_registration::init() {
 			"idx_tournament_participants_tournament_seed",
 			"tournament_participants",
 			"tournament_id, seed"
+		)
+		&& get_db().create_index_if_missing(
+			"idx_tournament_participant_ratings_bucket",
+			"tournament_participant_ratings",
+			"tournament_id, rating_bucket, rating_points"
 		)
 		&& get_db().set_schema_version(1);
 }
@@ -325,6 +358,82 @@ bool tournament_registration::set_participant_status(
 	return success;
 }
 
+bool tournament_registration::set_participant_rating(
+	int tournament_id,
+	const std::string& discord_id,
+	const std::string& rating_bucket,
+	double rating_points,
+	const std::string& source,
+	const std::string& updated_by,
+	int updated_at,
+	const std::string& note
+) {
+	if (tournament_id <= 0 || discord_id.empty() || rating_bucket.empty() || rating_points < 0.0 || !init()) {
+		return false;
+	}
+
+	if (!get_participant(tournament_id, discord_id)) {
+		return false;
+	}
+
+	sqlite3_stmt* stmt = nullptr;
+	const char* sql =
+		"INSERT INTO tournament_participant_ratings "
+		"(tournament_id, discord_id, rating_bucket, rating_points, source, updated_by, updated_at, note) "
+		"VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+		"ON CONFLICT(tournament_id, discord_id, rating_bucket) DO UPDATE SET "
+		"rating_points = excluded.rating_points, "
+		"source = excluded.source, "
+		"updated_by = excluded.updated_by, "
+		"updated_at = excluded.updated_at, "
+		"note = excluded.note;";
+
+	if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+		return false;
+	}
+
+	const bool bound =
+		sqlite3_bind_int(stmt, 1, tournament_id) == SQLITE_OK
+		&& bind_text(stmt, 2, discord_id)
+		&& bind_text(stmt, 3, rating_bucket)
+		&& sqlite3_bind_double(stmt, 4, rating_points) == SQLITE_OK
+		&& bind_text(stmt, 5, source.empty() ? "staff" : source)
+		&& bind_text(stmt, 6, updated_by)
+		&& sqlite3_bind_int(stmt, 7, updated_at) == SQLITE_OK
+		&& bind_text(stmt, 8, note);
+
+	const bool success = bound && sqlite3_step(stmt) == SQLITE_DONE;
+	sqlite3_finalize(stmt);
+	return success;
+}
+
+bool tournament_registration::clear_participant_rating(
+	int tournament_id,
+	const std::string& discord_id,
+	const std::string& rating_bucket
+) {
+	if (tournament_id <= 0 || discord_id.empty() || rating_bucket.empty() || !init()) {
+		return false;
+	}
+
+	sqlite3_stmt* stmt = nullptr;
+	const char* sql =
+		"DELETE FROM tournament_participant_ratings "
+		"WHERE tournament_id = ? AND discord_id = ? AND rating_bucket = ?;";
+
+	if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+		return false;
+	}
+
+	sqlite3_bind_int(stmt, 1, tournament_id);
+	bind_text(stmt, 2, discord_id);
+	bind_text(stmt, 3, rating_bucket);
+
+	const bool success = sqlite3_step(stmt) == SQLITE_DONE && sqlite3_changes(get_db().get_handle()) > 0;
+	sqlite3_finalize(stmt);
+	return success;
+}
+
 std::optional<tournament_registration::ParticipantRecord> tournament_registration::get_participant(int tournament_id, const std::string& discord_id) {
 	if (tournament_id <= 0 || discord_id.empty() || !init()) {
 		return std::nullopt;
@@ -347,6 +456,39 @@ std::optional<tournament_registration::ParticipantRecord> tournament_registratio
 	std::optional<tournament_registration::ParticipantRecord> result;
 	if (sqlite3_step(stmt) == SQLITE_ROW) {
 		result = read_participant(stmt);
+	}
+
+	sqlite3_finalize(stmt);
+	return result;
+}
+
+std::optional<tournament_registration::RatingRecord> tournament_registration::get_participant_rating(
+	int tournament_id,
+	const std::string& discord_id,
+	const std::string& rating_bucket
+) {
+	if (tournament_id <= 0 || discord_id.empty() || rating_bucket.empty() || !init()) {
+		return std::nullopt;
+	}
+
+	sqlite3_stmt* stmt = nullptr;
+	const char* sql =
+		"SELECT tournament_id, discord_id, rating_bucket, rating_points, source, updated_by, updated_at, note "
+		"FROM tournament_participant_ratings "
+		"WHERE tournament_id = ? AND discord_id = ? AND rating_bucket = ? "
+		"LIMIT 1;";
+
+	if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+		return std::nullopt;
+	}
+
+	sqlite3_bind_int(stmt, 1, tournament_id);
+	bind_text(stmt, 2, discord_id);
+	bind_text(stmt, 3, rating_bucket);
+
+	std::optional<tournament_registration::RatingRecord> result;
+	if (sqlite3_step(stmt) == SQLITE_ROW) {
+		result = read_rating(stmt);
 	}
 
 	sqlite3_finalize(stmt);
@@ -390,6 +532,46 @@ std::vector<tournament_registration::ParticipantRecord> tournament_registration:
 		}
 	}
 
+	return result;
+}
+
+std::vector<tournament_registration::RatingRecord> tournament_registration::list_ratings(
+	int tournament_id,
+	const std::string& rating_bucket
+) {
+	std::vector<tournament_registration::RatingRecord> result;
+	if (tournament_id <= 0 || !init()) {
+		return result;
+	}
+
+	sqlite3_stmt* stmt = nullptr;
+	const bool filter_bucket = !rating_bucket.empty();
+	const char* sql_all =
+		"SELECT tournament_id, discord_id, rating_bucket, rating_points, source, updated_by, updated_at, note "
+		"FROM tournament_participant_ratings "
+		"WHERE tournament_id = ? "
+		"ORDER BY rating_bucket ASC, rating_points DESC, discord_id ASC;";
+	const char* sql_bucket =
+		"SELECT tournament_id, discord_id, rating_bucket, rating_points, source, updated_by, updated_at, note "
+		"FROM tournament_participant_ratings "
+		"WHERE tournament_id = ? AND rating_bucket = ? "
+		"ORDER BY rating_points DESC, discord_id ASC;";
+	const char* sql = filter_bucket ? sql_bucket : sql_all;
+
+	if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+		return result;
+	}
+
+	sqlite3_bind_int(stmt, 1, tournament_id);
+	if (filter_bucket) {
+		bind_text(stmt, 2, rating_bucket);
+	}
+
+	while (sqlite3_step(stmt) == SQLITE_ROW) {
+		result.push_back(read_rating(stmt));
+	}
+
+	sqlite3_finalize(stmt);
 	return result;
 }
 

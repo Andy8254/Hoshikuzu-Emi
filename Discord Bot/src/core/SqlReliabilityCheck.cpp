@@ -4,6 +4,7 @@
 #include "tournament/manage.hpp"
 #include "tournament/registration.hpp"
 #include "tournament/ruleset.hpp"
+#include "tournament/seeding.hpp"
 #include <filesystem>
 #include <iostream>
 #include <set>
@@ -221,6 +222,58 @@ namespace {
 		ctx.require(tournament_bracket::report_match(*single_id, match_id, 2, 0), "report match score");
 		ctx.require(tournament_bracket::correct_match_report(*single_id, match_id, 2, 1), "correct reported match score");
 
+		const auto rating_id = tournament_manage::create_tournament("SQL reliability TE:C rating", "tec", "single_elimination");
+		if (!ctx.require(rating_id.has_value(), "create rating tournament")) {
+			return false;
+		}
+
+		for (int i = 1; i <= 3; ++i) {
+			tournament_registration::RegistrationRequest request;
+			request.tournament_id = *rating_id;
+			request.discord_id = std::to_string(9400 + i);
+			request.display_name = "Rating " + std::to_string(i);
+			request.provided_username = "rating" + std::to_string(i);
+			request.registered_at = 400 + i;
+			ctx.require(tournament_registration::register_player(request).ok, "register rating player " + std::to_string(i));
+
+			tournament_registration::CheckInRequest check_in;
+			check_in.tournament_id = *rating_id;
+			check_in.discord_id = request.discord_id;
+			check_in.provided_username = request.provided_username;
+			check_in.now = 1'900'000'000;
+			check_in.checkin_closes_at = 2'000'000'000;
+			ctx.require(tournament_registration::check_in_player(check_in).ok, "check in rating player " + std::to_string(i));
+		}
+
+		ctx.require(tournament_registration::set_participant_rating(
+			*rating_id,
+			"9401",
+			"tec_connected_vs",
+			1200.0,
+			"staff",
+			"1",
+			1'900'000'000
+		), "set rating player 1 points");
+		ctx.require(tournament_registration::set_participant_rating(
+			*rating_id,
+			"9402",
+			"tec_connected_vs",
+			1800.0,
+			"staff",
+			"1",
+			1'900'000'001
+		), "set rating player 2 points");
+		ctx.require(tournament_registration::get_participant_rating(*rating_id, "9402", "tec_connected_vs").has_value(), "read rating points");
+		ctx.require(!tournament_registration::list_ratings(*rating_id, "tec_connected_vs").empty(), "list rating points");
+
+		auto rating_seed = tournament_seeding::seed_by_rating(
+			tournament_registration::list_checked_in_participants(*rating_id),
+			"tec_connected_vs"
+		);
+		ctx.require(rating_seed.seeded.size() == 2 && rating_seed.excluded.size() == 1, "rating seeding excludes missing points");
+		ctx.require(!rating_seed.seeded.empty() && rating_seed.seeded.front().discord_id == "9402", "rating seeding sorts highest points first");
+		ctx.require(tournament_registration::clear_participant_rating(*rating_id, "9401", "tec_connected_vs"), "clear rating points");
+
 		const auto forfeit_id = tournament_manage::create_tournament("SQL reliability forfeit", "tetrio", "single_elimination");
 		if (!ctx.require(forfeit_id.has_value(), "create forfeit tournament")) {
 			return false;
@@ -397,6 +450,10 @@ int sql_reliability::run(const std::string& db_path) {
 		"tournament_id", "discord_id", "display_name", "provided_username",
 		"tetrio_id", "status", "seed", "registered_at", "checked_in_at"
 	}), "tournament_participants required columns");
+	ctx.require(has_columns(db, "tournament_participant_ratings", {
+		"tournament_id", "discord_id", "rating_bucket", "rating_points",
+		"source", "updated_by", "updated_at", "note"
+	}), "tournament_participant_ratings required columns");
 	ctx.require(has_columns(db, "tournament_matches", {
 		"id", "tournament_id", "bracket_match_index", "round", "position",
 		"bracket", "player_a_id", "player_b_id", "winner_id", "score_a",
@@ -418,6 +475,7 @@ int sql_reliability::run(const std::string& db_path) {
 	ctx.require(index_exists(db, "idx_tournaments_status"), "idx_tournaments_status exists");
 	ctx.require(index_exists(db, "idx_tournaments_format"), "idx_tournaments_format exists");
 	ctx.require(index_exists(db, "idx_tournament_participants_tournament_status"), "participant status index exists");
+	ctx.require(index_exists(db, "idx_tournament_participant_ratings_bucket"), "participant ratings bucket index exists");
 	ctx.require(index_exists(db, "idx_tournament_matches_tournament_state"), "match state index exists");
 	ctx.require(index_exists(db, "idx_tournament_matches_tournament_round"), "match round index exists");
 

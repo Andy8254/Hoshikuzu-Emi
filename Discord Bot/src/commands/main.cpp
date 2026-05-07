@@ -7,7 +7,7 @@
 #include <cstdlib>
 #include <string>
 
-const dpp::snowflake MOD_CHANNEL_ID = 1498301392073396234;
+const dpp::snowflake MOD_CHANNEL_ID = 1498301392073396234; //bot management server
 
 int main(int argc, char** argv) {
     if (argc >= 2 && std::string(argv[1]) == "--sql-reliability-check") {

@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cctype>
 #include <ctime>
+#include <iomanip>
 #include <sstream>
 
 namespace {
@@ -140,6 +141,85 @@ namespace {
 
 	bool valid_rank(const std::string& rank) {
 		return rank.empty() || rank_value(normalize_rank(rank)) >= 0;
+	}
+
+	std::string rating_bucket_display(const std::string& bucket) {
+		if (bucket == "tec_overall") return "TE:C Overall";
+		if (bucket == "tec_connected_vs") return "TE:C Connected VS";
+		if (bucket == "tec_zone_battle") return "TE:C Zone Battle";
+		if (bucket == "tec_score_attack") return "TE:C Score Attack";
+		if (bucket == "tec_classic_score_attack") return "TE:C Classic Score Attack";
+		if (bucket == "ppt2_puzzle") return "PPT2 Puzzle";
+		if (bucket == "ppt2_puyo_puyo") return "PPT2 Puyo Puyo";
+		if (bucket == "ppt2_tetris") return "PPT2 Tetris";
+		if (bucket == "general_single_rank_point") return "General Single Rank Point";
+		return bucket.empty() ? "Unspecified" : bucket;
+	}
+
+	bool valid_rating_bucket(const std::string& bucket) {
+		return bucket == "tec_overall"
+			|| bucket == "tec_connected_vs"
+			|| bucket == "tec_zone_battle"
+			|| bucket == "tec_score_attack"
+			|| bucket == "tec_classic_score_attack"
+			|| bucket == "ppt2_puzzle"
+			|| bucket == "ppt2_puyo_puyo"
+			|| bucket == "ppt2_tetris"
+			|| bucket == "general_single_rank_point";
+	}
+
+	bool rating_bucket_matches_game(const std::string& game_type, const std::string& bucket) {
+		if (bucket == "general_single_rank_point") {
+			return true;
+		}
+
+		if (bucket.rfind("tec_", 0) == 0) {
+			return game_type == "tec";
+		}
+
+		if (bucket.rfind("ppt2_", 0) == 0) {
+			return game_type == "ppt2";
+		}
+
+		return false;
+	}
+
+	std::string default_rating_bucket_for_game(const std::string& game_type) {
+		if (game_type == "tec") return "tec_overall";
+		if (game_type == "ppt2") return "ppt2_tetris";
+		return "general_single_rank_point";
+	}
+
+	std::string format_points(double points) {
+		std::ostringstream out;
+		out << std::fixed << std::setprecision(2) << points;
+		return out.str();
+	}
+
+	std::string csv_escape(const std::string& value) {
+		bool needs_quotes = false;
+		for (char c : value) {
+			if (c == ',' || c == '"' || c == '\n' || c == '\r') {
+				needs_quotes = true;
+				break;
+			}
+		}
+
+		if (!needs_quotes) {
+			return value;
+		}
+
+		std::string escaped = "\"";
+		for (char c : value) {
+			if (c == '"') {
+				escaped += "\"\"";
+			}
+			else {
+				escaped += c;
+			}
+		}
+		escaped += "\"";
+		return escaped;
 	}
 
 	bool tetrio_filters_active(const tournament_seeding::TetrioSeedFilters& filters) {
@@ -951,8 +1031,12 @@ namespace {
 			return;
 		}
 
-		const std::string default_mode = tournament->game_type == "tetrio" ? "tetrio" : "general";
+		const bool rating_game = tournament->game_type == "tec" || tournament->game_type == "ppt2";
+		const std::string default_mode = tournament->game_type == "tetrio"
+			? "tetrio"
+			: (rating_game ? "rating" : "general");
 		const std::string mode = get_string_option(subcommand, "mode", default_mode);
+		std::string rating_bucket = get_string_option(subcommand, "bucket");
 
 		auto participants = tournament_registration::list_checked_in_participants(tournament_id);
 
@@ -960,6 +1044,25 @@ namespace {
 		std::vector<tournament_seeding::ExcludedPlayer> excluded;
 		if (mode == "tetrio") {
 			auto result = tournament_seeding::seed_tetrio_with_filters(participants, tournament->tetrio_filters);
+			seeded = std::move(result.seeded);
+			excluded = std::move(result.excluded);
+		}
+		else if (mode == "rating") {
+			if (rating_bucket.empty()) {
+				rating_bucket = default_rating_bucket_for_game(tournament->game_type);
+			}
+
+			if (!valid_rating_bucket(rating_bucket)) {
+				edit_logged(event, "Invalid rating bucket.");
+				return;
+			}
+
+			if (!rating_bucket_matches_game(tournament->game_type, rating_bucket)) {
+				edit_logged(event, "Rating bucket `" + rating_bucket_display(rating_bucket) + "` does not match this tournament's game type.");
+				return;
+			}
+
+			auto result = tournament_seeding::seed_by_rating(participants, rating_bucket);
 			seeded = std::move(result.seeded);
 			excluded = std::move(result.excluded);
 		}
@@ -1519,6 +1622,122 @@ namespace {
 		edit_logged(event, "TETR.IO restrictions updated:\n" + describe_tetrio_filters(filters));
 	}
 
+	void handle_rating_set(const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
+		if (!require_manage(event)) return;
+		event.thinking(false);
+
+		const int tournament_id = get_int_option(subcommand, "id");
+		const dpp::snowflake user_id = get_snowflake_option(subcommand, "user");
+		const std::string discord_id = std::to_string(user_id);
+		const std::string bucket = get_string_option(subcommand, "bucket");
+		const auto points = get_number_option(subcommand, "points");
+		const std::string note = neutralise_mass_mentions(get_string_option(subcommand, "note"));
+
+		const auto tournament = tournament_manage::get_tournament(tournament_id);
+		if (!tournament) {
+			edit_logged(event, "Tournament not found.");
+			return;
+		}
+
+		if (!user_id || !points || *points < 0.0) {
+			edit_logged(event, "Choose a participant and a non-negative rating point value.");
+			return;
+		}
+
+		if (!valid_rating_bucket(bucket)) {
+			edit_logged(event, "Invalid rating bucket.");
+			return;
+		}
+
+		if (!rating_bucket_matches_game(tournament->game_type, bucket)) {
+			edit_logged(event, "Rating bucket `" + rating_bucket_display(bucket) + "` does not match this tournament's game type.");
+			return;
+		}
+
+		if (!tournament_registration::set_participant_rating(
+			tournament_id,
+			discord_id,
+			bucket,
+			*points,
+			"staff",
+			std::to_string(event.command.usr.id),
+			static_cast<int>(time(nullptr)),
+			note
+		)) {
+			edit_logged(event, "Could not set rating points. Make sure the user is registered for this tournament.");
+			return;
+		}
+
+		edit_logged(
+			event,
+			"Set `" + rating_bucket_display(bucket) + "` for <@" + discord_id + "> to `" + format_points(*points) + "`."
+		);
+	}
+
+	void handle_rating_clear(const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
+		if (!require_manage(event)) return;
+		event.thinking(false);
+
+		const int tournament_id = get_int_option(subcommand, "id");
+		const dpp::snowflake user_id = get_snowflake_option(subcommand, "user");
+		const std::string bucket = get_string_option(subcommand, "bucket");
+
+		if (!user_id || !valid_rating_bucket(bucket)) {
+			edit_logged(event, "Choose a participant and a valid rating bucket.");
+			return;
+		}
+
+		if (!tournament_registration::clear_participant_rating(tournament_id, std::to_string(user_id), bucket)) {
+			edit_logged(event, "Could not clear rating points. There may be no rating set for that participant and bucket.");
+			return;
+		}
+
+		edit_logged(event, "Cleared `" + rating_bucket_display(bucket) + "` for <@" + std::to_string(user_id) + ">.");
+	}
+
+	void handle_rating_list(const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
+		if (!require_manage(event)) return;
+		event.thinking(false);
+
+		const int tournament_id = get_int_option(subcommand, "id");
+		const std::string bucket = get_string_option(subcommand, "bucket");
+		if (!bucket.empty() && !valid_rating_bucket(bucket)) {
+			edit_logged(event, "Invalid rating bucket.");
+			return;
+		}
+
+		const auto ratings = tournament_registration::list_ratings(tournament_id, bucket);
+		if (ratings.empty()) {
+			edit_logged(event, "No manual ratings are stored for that tournament" + (bucket.empty() ? std::string(".") : " and bucket."));
+			return;
+		}
+
+		std::ostringstream out;
+		out << "Manual ratings";
+		if (!bucket.empty()) {
+			out << " for " << rating_bucket_display(bucket);
+		}
+		out << ":\n```csv\nplayer,bucket,points,source,updated_by,updated_at,note\n";
+
+		for (const auto& rating : ratings) {
+			out << csv_escape(rating.discord_id) << ','
+				<< csv_escape(rating.rating_bucket) << ','
+				<< rating.rating_points << ','
+				<< csv_escape(rating.source) << ','
+				<< csv_escape(rating.updated_by) << ','
+				<< rating.updated_at << ','
+				<< csv_escape(rating.note) << '\n';
+		}
+
+		std::string message = out.str();
+		if (message.size() > 1850) {
+			message.resize(1850);
+			message += "\n...";
+		}
+		message += "```";
+		edit_logged(event, message);
+	}
+
 	void handle_registration_open(dpp::cluster& bot, const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
 		if (!require_manage(event)) return;
 		event.thinking(false);
@@ -1709,6 +1928,9 @@ namespace {
 		if (subcommand.name == "log_channel_clear") return handle_clear_tournament_log_channel(event);
 		if (subcommand.name == "set_format") return handle_set_tournament_format(event, subcommand);
 		if (subcommand.name == "tetrio_restrictions") return handle_tetrio_restrictions(event, subcommand);
+		if (subcommand.name == "rating_set") return handle_rating_set(event, subcommand);
+		if (subcommand.name == "rating_clear") return handle_rating_clear(event, subcommand);
+		if (subcommand.name == "rating_list") return handle_rating_list(event, subcommand);
 		if (subcommand.name == "ruleset_show") return handle_ruleset_show(event, subcommand);
 		if (subcommand.name == "ruleset_set_primary") return handle_ruleset_set_primary(event, subcommand);
 		if (subcommand.name == "ruleset_set_secondary") return handle_ruleset_set_secondary(event, subcommand);

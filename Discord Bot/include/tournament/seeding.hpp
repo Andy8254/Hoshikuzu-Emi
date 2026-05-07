@@ -23,6 +23,9 @@ namespace tournament_seeding {
 		std::string tetrio_top_rank = "Z";
 		bool has_tetrio_data = false;
 		std::string tetrio_status = "not_checked";
+		std::string rating_bucket;
+		double rating_points = 0.0;
+		bool has_rating_points = false;
 	};
 
 	struct TetrioSeedFilters {
@@ -47,6 +50,11 @@ namespace tournament_seeding {
 		std::vector<ExcludedPlayer> excluded;
 	};
 
+	struct RatingSeedResult {
+		std::vector<SeededPlayer> seeded;
+		std::vector<ExcludedPlayer> excluded;
+	};
+
 	std::vector<SeededPlayer> seed_general(
 		std::vector<tournament_registration::ParticipantRecord> participants,
 		SeedingMode mode = SeedingMode::RegistrationOrder
@@ -59,6 +67,12 @@ namespace tournament_seeding {
 	TetrioSeedResult seed_tetrio_with_filters(
 		std::vector<tournament_registration::ParticipantRecord> participants,
 		const TetrioSeedFilters& filters
+	);
+
+	RatingSeedResult seed_by_rating(
+		std::vector<tournament_registration::ParticipantRecord> participants,
+		const std::string& rating_bucket,
+		bool exclude_missing = true
 	);
 
 	std::vector<std::string> to_bracket_player_ids(const std::vector<SeededPlayer>& seeded_players);

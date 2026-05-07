@@ -269,6 +269,7 @@ bool tournament_manage::clear_all_tournament_data() {
 	const char* sql =
 		"DELETE FROM tournament_matches;"
 		"DELETE FROM tournament_rulesets;"
+		"DELETE FROM tournament_participant_ratings;"
 		"DELETE FROM tournament_participants;"
 		"DELETE FROM participants;"
 		"DELETE FROM match_history;"

@@ -262,6 +262,75 @@ tournament_seeding::TetrioSeedResult tournament_seeding::seed_tetrio_with_filter
 	return result;
 }
 
+tournament_seeding::RatingSeedResult tournament_seeding::seed_by_rating(
+	std::vector<tournament_registration::ParticipantRecord> participants,
+	const std::string& rating_bucket,
+	bool exclude_missing
+) {
+	RatingSeedResult result;
+	std::vector<SeededPlayer> players;
+	if (rating_bucket.empty()) {
+		result.seeded = seed_general(std::move(participants));
+		return result;
+	}
+
+	for (const auto& participant : participants) {
+		if (!is_seedable(participant)) {
+			continue;
+		}
+
+		SeededPlayer player = to_seeded_player(participant);
+		player.rating_bucket = rating_bucket;
+		auto rating = tournament_registration::get_participant_rating(
+			participant.tournament_id,
+			participant.discord_id,
+			rating_bucket
+		);
+
+		if (rating) {
+			player.rating_points = rating->rating_points;
+			player.has_rating_points = true;
+		}
+		else if (exclude_missing) {
+			result.excluded.push_back({
+				player.discord_id,
+				player.display_name,
+				player.tetrio_id,
+				"Missing rating points for " + rating_bucket
+			});
+			continue;
+		}
+
+		players.push_back(player);
+	}
+
+	std::stable_sort(
+		players.begin(),
+		players.end(),
+		[](const SeededPlayer& a, const SeededPlayer& b) {
+			if (a.has_rating_points != b.has_rating_points) {
+				return a.has_rating_points;
+			}
+
+			if (a.rating_points != b.rating_points) {
+				return a.rating_points > b.rating_points;
+			}
+
+			if (a.seed != b.seed) {
+				if (a.seed == 0) return false;
+				if (b.seed == 0) return true;
+				return a.seed < b.seed;
+			}
+
+			return a.discord_id < b.discord_id;
+		}
+	);
+
+	assign_seeds(players);
+	result.seeded = std::move(players);
+	return result;
+}
+
 std::vector<std::string> tournament_seeding::to_bracket_player_ids(
 	const std::vector<SeededPlayer>& seeded_players
 ) {
@@ -277,7 +346,7 @@ std::vector<std::string> tournament_seeding::to_bracket_player_ids(
 
 std::string tournament_seeding::export_seed_csv(const std::vector<SeededPlayer>& seeded_players) {
 	std::ostringstream csv;
-	csv << "seed,discord_id,display_name,tetrio_id,tetrio_rating,tetrio_current_rank,tetrio_top_rank,tetrio_world_rank,has_tetrio_data,tetrio_status\n";
+	csv << "seed,discord_id,display_name,tetrio_id,tetrio_rating,tetrio_current_rank,tetrio_top_rank,tetrio_world_rank,has_tetrio_data,tetrio_status,rating_bucket,rating_points,has_rating_points\n";
 
 	for (const SeededPlayer& player : seeded_players) {
 		csv
@@ -290,7 +359,10 @@ std::string tournament_seeding::export_seed_csv(const std::vector<SeededPlayer>&
 			<< csv_escape(player.tetrio_top_rank) << ','
 			<< player.tetrio_world_rank << ','
 			<< (player.has_tetrio_data ? "true" : "false") << ','
-			<< csv_escape(player.tetrio_status) << '\n';
+			<< csv_escape(player.tetrio_status) << ','
+			<< csv_escape(player.rating_bucket) << ','
+			<< player.rating_points << ','
+			<< (player.has_rating_points ? "true" : "false") << '\n';
 	}
 
 	return csv.str();
