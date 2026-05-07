@@ -1,24 +1,19 @@
-# Hami/Emi Bot Help
-Tournament operations, player profiles, moderation tools, and server configuration are grouped into a small slash-command surface.
-
+﻿# Hami/Emi Bot Help
+Features are grouped into five main commands.
 ## Main Commands
-- `/bot`: help, health checks, bot info, and privacy notice.
-- `/profile`: player profile, linked accounts, personal language, and TETR.IO lookup.
-- `/settings`: server roles, language settings, and moderation log routing.
-- `/mod`: warnings, notes, history, timeouts, kicks, bans, and unbans.
-- `/tournament`: tournament setup, registration, check-in, bracket operations, panels, and event configuration.
-
+- `/bot`: help, health checks, bot info
+- `/profile`: profiles, linked accounts, language
+- `/settings`: server roles, language, logs
+- `/mod`: warnings, notes, moderation records
+- `/tournament`: registration, check-in, brackets
 ## Tournament Subgroups
-- `/tournament bracket`: match generation, reports, corrections, no-shows, streams, standings, and SVG exports.
-- `/tournament config`: event roles, channels, audit logs, format, and rulesets.
-
+- `/tournament bracket`: matches, reports, standings
+- `/tournament config`: channels, roles, rulesets
 ## Player Flow
-Players normally use buttons where possible: registration panel, check-in panel, and match screen buttons. Slash commands remain available for staff recovery and audit-friendly operations.
-
+Players should use buttons where possible.
+Slash commands remain available for staff recovery.
 ## Language
-Help pages are loaded from `resources/help/<language>/<module>/<command>.md`. Empty KO-kr pages intentionally fall back to this EN-gb text until translated.
-
+If a translated help page is missing, the bot falls back to `EN-gb`.
 ## Examples
 - `/bot help category:tournament`
-- `/bot help category:tournament_bracket command:report`
-- `/bot help category:settings command:secondary_language`
+- `/bot help category:profile command:link`

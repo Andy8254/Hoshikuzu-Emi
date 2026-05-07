@@ -1,11 +1,9 @@
-# /profile delete
-Deletes your local profile data.
-
+﻿# /profile delete
+Deletes your own profile data.
 ## Usage
 `/profile delete`
-
 ## Details
 Use when you want to wipe your stored player profile from the bot database.
-
 ## Notes
-This is destructive personal-data handling. Recreate later with `/profile init`.
+Use this when you want to permanently delete your own stored profile data.
+You can recreate it later with `/profile init`.

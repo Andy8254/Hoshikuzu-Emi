@@ -20,6 +20,7 @@ struct TetrioProfile {
 	double vs = 0.0;
 
 	bool has_league_data = false;
+	std::string league_status = "not_checked";
 };
 
 class TetrioService {

@@ -1,12 +1,10 @@
-# /settings
+﻿# /settings
 Server-wide bot settings for language, secondary display, staff roles, and moderation logging.
-
 ## Who Uses This
-Server owner, admins, and configured staff roles. The bot checks permission before writing settings.
-
+Only the server owner and users configured as admins can use these commands.
+When a settings command is used, the bot checks the user's permission before writing any changes.
 ## Workflow
-Set roles first, then language/logging. Use `/settings show` after changes.
-
+Set roles first, then configure language and moderation log channels. Use `/settings show` after changes.
 ## Commands
 - `show`: Shows current server settings.
 - `set_admin_role`: Sets the server admin role.
@@ -16,6 +14,5 @@ Set roles first, then language/logging. Use `/settings show` after changes.
 - `secondary_language`: Sets or clears the server secondary display language.
 - `modlog_set`: Sets the moderation log channel.
 - `modlog_clear`: Clears the moderation log channel.
-
 ## Help
 Use `/bot help category:settings command:<command>` for a command-specific page.

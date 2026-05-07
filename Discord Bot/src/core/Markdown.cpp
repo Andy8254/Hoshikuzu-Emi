@@ -2,6 +2,14 @@
 #include <fstream>
 #include <sstream>
 
+namespace {
+	void trim_trailing_blank_lines(std::string& value) {
+		while (!value.empty() && (value.back() == '\n' || value.back() == '\r')) {
+			value.pop_back();
+		}
+	}
+}
+
 namespace md {
 	std::string read_file(const std::string& path) {
 		std::ifstream file(path);
@@ -32,21 +40,39 @@ dpp::message md::to_message(const std::string& markdown) {
 	std::string line;
 
 	bool has_description = false;
+	std::string current_field_name;
+	std::string current_field_value;
+
+	auto flush_field = [&]() {
+		trim_trailing_blank_lines(current_field_value);
+		if (!current_field_name.empty() && !current_field_value.empty()) {
+			embed.add_field(current_field_name, current_field_value, false);
+		}
+
+		current_field_name.clear();
+		current_field_value.clear();
+	};
 
 	while (std::getline(stream, line)) {
 		if (line.starts_with("# ")) {
+			flush_field();
 			embed.set_title(line.substr(2));
 		}
 
 		else if (line.starts_with("## ")) {
-			std::string field_name = line.substr(3);
-			std::string field_value;
+			flush_field();
+			current_field_name = line.substr(3);
+		}
 
-			if (std::getline(stream, field_value)) {
-				if (!field_value.empty()) {
-					embed.add_field(field_name, field_value, false);
-				}
+		else if (!current_field_name.empty()) {
+			if (current_field_value.empty() && line.empty()) {
+				continue;
 			}
+
+			if (!current_field_value.empty()) {
+				current_field_value += "\n";
+			}
+			current_field_value += line;
 		}
 
 		else if (!line.empty() && !has_description) {
@@ -54,6 +80,8 @@ dpp::message md::to_message(const std::string& markdown) {
 			has_description = true;
 		}
 	}
+
+	flush_field();
 
 	return dpp::message().add_embed(embed);
 }

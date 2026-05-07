@@ -297,7 +297,7 @@ void register_discord_commands(dpp::cluster& bot, dpp::snowflake mod_channel_id)
 
             dpp::command_option bracket(dpp::co_sub_command_group, "bracket", "Bracket and match operations");
 
-            dpp::command_option bracket_generate(dpp::co_sub_command, "generate", "Generate a bracket from checked-in players");
+            dpp::command_option bracket_generate(dpp::co_sub_command, "generate", "Generate a bracket and queue current match threads");
             bracket_generate.add_option(dpp::command_option(dpp::co_integer, "id", "Tournament ID", true));
             dpp::command_option bracket_type(dpp::co_string, "type", "Bracket type, or omit to use tournament format", false);
             bracket_generate.add_option(add_format_choices(bracket_type));

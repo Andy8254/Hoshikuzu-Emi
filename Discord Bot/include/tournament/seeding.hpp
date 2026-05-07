@@ -22,6 +22,7 @@ namespace tournament_seeding {
 		std::string tetrio_current_rank = "Z";
 		std::string tetrio_top_rank = "Z";
 		bool has_tetrio_data = false;
+		std::string tetrio_status = "not_checked";
 	};
 
 	struct TetrioSeedFilters {

@@ -1,17 +1,15 @@
-# /tournament
-Tournament lifecycle and player workflow commands: creation, registration, check-in, seeding, and participant views.
-
+﻿# /tournament
+Tournament and player-management tools for creation, registration, check-in, seeding, and participant views.
 ## Who Uses This
-Tournament staff for operations; players for registration, check-in, and call-staff recovery paths.
-
+Regular users can use player-facing flows such as registration, check-in, and calling staff.
+Staff can use operational flows for tournament management.
 ## Workflow
-Create the tournament, open registration, open check-in, seed checked-in players, then generate bracket matches.
-
+Create the tournament, open registration, open check-in, seed checked-in players according to the selected criteria, then generate the bracket.
 ## Commands
-- `create`: Creates a tournament record.
+- `create`: Creates a new tournament.
 - `edit`: Edits tournament metadata.
-- `delete`: Deletes one tournament record.
-- `clear`: Expunges tournament module data.
+- `delete`: Deletes the selected tournament.
+- `clear`: Deletes all tournament data stored for the server.
 - `info`: Shows public tournament information.
 - `staff_info`: Shows staff tournament information.
 - `registration_open`: Opens registration and posts a registration panel.
@@ -20,9 +18,8 @@ Create the tournament, open registration, open check-in, seed checked-in players
 - `checkin_close`: Closes tournament check-in.
 - `register`: Registers or unregisters a player by slash command.
 - `checkin`: Checks in or unchecks a player by slash command.
-- `call_staff`: Calls staff for a match.
+- `call_staff`: Calls staff for the current match.
 - `participants`: Lists tournament participants.
-- `seed`: Seeds checked-in players.
-
+- `seed`: Assigns seed numbers to checked-in players according to the selected criteria.
 ## Help
 Use `/bot help category:tournament command:<command>` for a command-specific page.

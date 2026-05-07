@@ -1,11 +1,9 @@
-# /tournament registration_open
-Opens registration and posts a registration panel.
-
+﻿# /tournament registration_open
+Opens registration and posts the registration panel to the configured channel.
 ## Usage
 `/tournament registration_open id:<id>`
-
 ## Details
-Players press Register and enter only their tournament username; the bot handles the registration record.
-
+Players press Register and enter the username for the selected platform.
+The bot then stores the registration record in the server database.
 ## Notes
-Requires a tournament channel configured with `/tournament config set_channel`.
+Set the tournament channel first with `/tournament config set_channel`.

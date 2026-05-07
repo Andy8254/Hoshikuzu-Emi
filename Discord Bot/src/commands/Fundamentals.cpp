@@ -32,22 +32,7 @@ void register_fundamental_commands(dpp::cluster& bot) {
     };
 
     handlers["privacy"] = [](const dpp::slashcommand_t& event) {
-        event.reply(
-            "📄 **Privacy Notice**\n"
-            "Hi there~ Emi here! 🌸\n"
-            "\n"
-            "I only keep a tiny bit of information so I can help you properly:\n"
-            "• Your Discord ID\n"
-            "• Your linked TETR.IO username\n"
-            "• Server settings (like roles)\n"
-            "\n"
-            "I don't collect anything personal, and I would never sell or share your data.\n"
-            "Everything is safely kept on the host machine I live in~ ✨\n"
-            "\n"
-            "If you ever want your data removed, just use `/unlink` or `/unlink_platform`.\n"
-            "\n"
-            "Full details: https://github.com/Andy8254/Hoshikuzu-Emi/blob/master/Discord%20Bot/resources/legal/terms.md"
-        );
+        event.reply(localization::message_text(event.command.guild_id, event.command.usr.id, "bot.privacy"));
     };
 
     handlers["bot"] = [](const dpp::slashcommand_t& event) {

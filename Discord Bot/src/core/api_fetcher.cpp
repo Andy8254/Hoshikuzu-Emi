@@ -23,6 +23,8 @@ HttpResponse HttpClient::get(const std::string& url) {
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &buffer);
 	curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
+	curl_easy_setopt(curl, CURLOPT_USERAGENT, "Hoshikuzu-Emi/1.0");
+	curl_easy_setopt(curl, CURLOPT_PROXY, "");
 
 	CURLcode res = curl_easy_perform(curl);
 

@@ -15,6 +15,7 @@
   "bot.choose_subcommand": "봇 하위 명령어를 선택해 주세요. 제가 바로 도와드릴게요. (｀・ω・´)",
   "bot.unknown_subcommand": "그 봇 하위 명령어는 아직 모르겠어요. (・・?)",
   "bot.ping": "Pong! Emi 여기 있어요! 무엇을 도와드릴까요?",
+  "bot.privacy": "📄 **개인정보 안내**\n\n봇 기능을 제공하기 위해 필요한 정보만 저장합니다:\n• Discord ID\n• TETR.IO 등 연결된 플랫폼 유저네임\n• 역할과 언어 설정 등 서버 설정\n• 봇을 통해 생성된 토너먼트, 프로필, 서버 관리 기록\n\n봇은 사용자 데이터를 판매하거나 광고 목적으로 공유하지 않습니다. 데이터는 봇을 실행하는 호스트 장치에 저장됩니다.\n\n프로필 데이터를 삭제하고 싶다면 `/profile unlink`로 연결된 플랫폼 계정을 해제하거나, `/profile delete`로 봇 프로필을 삭제할 수 있습니다.\n\n자세한 내용: https://github.com/Andy8254/Hoshikuzu-Emi/blob/master/Discord%20Bot/resources/legal/terms.md",
   "profile.init.ok": "프로필을 초기화했어요. 계정들을 정리해 둘 작은 자리를 마련해 두었답니다. (´▽`)",
   "profile.init.exists": "이미 등록되어 있어요. 프로필은 그대로 잘 보관해 두었답니다. (^_^)",
   "profile.init.failed": "프로필을 초기화하지 못했어요. 잠시 후 다시 시도해 주세요. (；ω；)",

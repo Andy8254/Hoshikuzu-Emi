@@ -945,12 +945,14 @@ namespace {
 		event.thinking(false);
 
 		const int tournament_id = get_int_option(subcommand, "id");
-		const std::string mode = get_string_option(subcommand, "mode", "general");
 		const auto tournament = tournament_manage::get_tournament(tournament_id);
 		if (!tournament) {
 			edit_logged(event, "Tournament not found.");
 			return;
 		}
+
+		const std::string default_mode = tournament->game_type == "tetrio" ? "tetrio" : "general";
+		const std::string mode = get_string_option(subcommand, "mode", default_mode);
 
 		auto participants = tournament_registration::list_checked_in_participants(tournament_id);
 
@@ -989,7 +991,27 @@ namespace {
 		edit_logged(event, message);
 	}
 
-	void handle_bracket_generate(const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
+	int queue_match_threads(
+		dpp::cluster& bot,
+		dpp::snowflake guild_id,
+		dpp::snowflake channel_id,
+		const std::vector<tournament_bracket::StoredMatch>& matches,
+		bool include_buttons
+	) {
+		int queued = 0;
+		for (const auto& match : matches) {
+			if (match.thread_id || match.player_a_id.empty() || match.player_b_id.empty()) {
+				continue;
+			}
+
+			tournament_discord::create_match_thread(bot, guild_id, channel_id, match, include_buttons);
+			++queued;
+		}
+
+		return queued;
+	}
+
+	void handle_bracket_generate(dpp::cluster& bot, const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
 		if (!require_manage(event)) return;
 		event.thinking(false);
 
@@ -1029,17 +1051,35 @@ namespace {
 			return;
 		}
 
-		edit_logged(
-			event,
-			localization::guild_text(
-				event.command.guild_id,
-				"tournament.generate.ok",
-				{
-					{ "format", label },
-					{ "tournament_id", std::to_string(tournament_id) }
-				}
-			)
+		std::string message = localization::guild_text(
+			event.command.guild_id,
+			"tournament.generate.ok",
+			{
+				{ "format", label },
+				{ "tournament_id", std::to_string(tournament_id) }
+			}
 		);
+
+		const dpp::snowflake channel_id = GuildConfigManager::get_tournament_channel(event.command.guild_id);
+		if (channel_id) {
+			const int queued = queue_match_threads(
+				bot,
+				event.command.guild_id,
+				channel_id,
+				tournament_bracket::list_current_matches(tournament_id),
+				true
+			);
+			message += "\n" + localization::guild_text(
+				event.command.guild_id,
+				"tournament.threads.queued",
+				{ { "count", std::to_string(queued) } }
+			);
+		}
+		else {
+			message += "\n" + localization::guild_text(event.command.guild_id, "tournament.channel.not_configured");
+		}
+
+		edit_logged(event, message);
 	}
 
 	void handle_matches_current(const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
@@ -1268,15 +1308,7 @@ namespace {
 			? tournament_bracket::list_round_matches(tournament_id, round - 1)
 			: tournament_bracket::list_current_matches(tournament_id);
 
-		int queued = 0;
-		for (const auto& match : matches) {
-			if (match.thread_id || match.player_a_id.empty() || match.player_b_id.empty()) {
-				continue;
-			}
-
-			tournament_discord::create_match_thread(bot, event.command.guild_id, channel_id, match, include_buttons);
-			++queued;
-		}
+		const int queued = queue_match_threads(bot, event.command.guild_id, channel_id, matches, include_buttons);
 
 		edit_logged(event, "Queued `" + std::to_string(queued) + "` match thread creation request(s).");
 	}
@@ -1693,7 +1725,7 @@ namespace {
 
 		const auto& subcommand = group.options.front();
 
-		if (subcommand.name == "generate") return handle_bracket_generate(event, subcommand);
+		if (subcommand.name == "generate") return handle_bracket_generate(bot, event, subcommand);
 		if (subcommand.name == "current") return handle_matches_current(event, subcommand);
 		if (subcommand.name == "round") return handle_matches_round(event, subcommand);
 		if (subcommand.name == "match") return handle_match_show(event, subcommand);
@@ -1737,7 +1769,7 @@ void register_tournament_commands(dpp::cluster& bot) {
 		if (subcommand.name == "participants") return handle_participants(event, subcommand);
 		if (subcommand.name == "seed") return handle_seed(event, subcommand);
 		if (subcommand.name == "call_staff") return handle_call_staff(bot, event, subcommand);
-		if (subcommand.name == "bracket_generate") return handle_bracket_generate(event, subcommand);
+		if (subcommand.name == "bracket_generate") return handle_bracket_generate(bot, event, subcommand);
 		if (subcommand.name == "matches_current") return handle_matches_current(event, subcommand);
 		if (subcommand.name == "matches_round") return handle_matches_round(event, subcommand);
 		if (subcommand.name == "match_show") return handle_match_show(event, subcommand);

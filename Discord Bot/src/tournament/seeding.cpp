@@ -156,6 +156,7 @@ tournament_seeding::TetrioSeedResult tournament_seeding::seed_tetrio_with_filter
 
 	for (SeededPlayer& player : players) {
 		if (player.tetrio_id.empty()) {
+			player.tetrio_status = "missing_username";
 			if (filter_active) {
 				result.excluded.push_back({ player.discord_id, player.display_name, player.tetrio_id, "Missing TETR.IO username" });
 			}
@@ -164,6 +165,7 @@ tournament_seeding::TetrioSeedResult tournament_seeding::seed_tetrio_with_filter
 
 		auto profile = TetrioService::fetch_user(player.tetrio_id);
 		if (!profile) {
+			player.tetrio_status = "profile_fetch_failed";
 			if (filter_active) {
 				result.excluded.push_back({ player.discord_id, player.display_name, player.tetrio_id, "Could not fetch TETR.IO profile" });
 			}
@@ -176,6 +178,7 @@ tournament_seeding::TetrioSeedResult tournament_seeding::seed_tetrio_with_filter
 		player.tetrio_current_rank = profile->rank;
 		player.tetrio_top_rank = profile->top_rank;
 		player.has_tetrio_data = profile->has_league_data;
+		player.tetrio_status = profile->league_status;
 
 		if (filter_active && !player.has_tetrio_data && !filters.allow_unranked) {
 			result.excluded.push_back({ player.discord_id, player.display_name, player.tetrio_id, "No TETRA LEAGUE data" });
@@ -274,7 +277,7 @@ std::vector<std::string> tournament_seeding::to_bracket_player_ids(
 
 std::string tournament_seeding::export_seed_csv(const std::vector<SeededPlayer>& seeded_players) {
 	std::ostringstream csv;
-	csv << "seed,discord_id,display_name,tetrio_id,tetrio_rating,tetrio_current_rank,tetrio_top_rank,tetrio_world_rank,has_tetrio_data\n";
+	csv << "seed,discord_id,display_name,tetrio_id,tetrio_rating,tetrio_current_rank,tetrio_top_rank,tetrio_world_rank,has_tetrio_data,tetrio_status\n";
 
 	for (const SeededPlayer& player : seeded_players) {
 		csv
@@ -286,7 +289,8 @@ std::string tournament_seeding::export_seed_csv(const std::vector<SeededPlayer>&
 			<< csv_escape(player.tetrio_current_rank) << ','
 			<< csv_escape(player.tetrio_top_rank) << ','
 			<< player.tetrio_world_rank << ','
-			<< (player.has_tetrio_data ? "true" : "false") << '\n';
+			<< (player.has_tetrio_data ? "true" : "false") << ','
+			<< csv_escape(player.tetrio_status) << '\n';
 	}
 
 	return csv.str();

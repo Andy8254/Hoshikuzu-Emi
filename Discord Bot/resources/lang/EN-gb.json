@@ -15,6 +15,7 @@
   "bot.choose_subcommand": "Choose a bot subcommand and I will help from there. (｀・ω・´)",
   "bot.unknown_subcommand": "I do not know that bot subcommand yet. (・・?)",
   "bot.ping": "Pong! Emi is here. What can I help with?",
+  "bot.privacy": "📄 **Privacy Notice**\n\nI only keep the information needed to provide bot features:\n• Your Discord ID\n• Linked platform usernames, such as TETR.IO\n• Server settings, such as roles and language settings\n• Tournament, profile, and moderation records created through the bot\n\nI do not sell your data or share it for advertising. Data is stored on the host machine used to run the bot.\n\nIf you want your profile data removed, use `/profile unlink` for a linked platform account or `/profile delete` for your bot profile.\n\nFull details: https://github.com/Andy8254/Hoshikuzu-Emi/blob/master/Discord%20Bot/resources/legal/terms.md",
   "profile.init.ok": "Profile initialised. I have made a neat little place for your accounts. (´▽`)",
   "profile.init.exists": "You already have a profile. It is right where we left it. (^_^)",
   "profile.init.failed": "I could not initialise your profile. Please try again in a moment. (；ω；)",

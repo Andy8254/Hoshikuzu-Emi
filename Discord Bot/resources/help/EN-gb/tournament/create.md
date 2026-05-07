@@ -1,11 +1,9 @@
-# /tournament create
-Creates a tournament record.
-
+﻿# /tournament create
+Creates a new tournament.
 ## Usage
 `/tournament create name:<name> [game] [format]`
-
 ## Details
-The returned tournament ID is used by registration, check-in, seeding, and bracket commands.
-
+When successful, the bot returns a tournament ID.
+This tournament ID is required by registration, check-in, seeding, and bracket commands.
 ## Notes
-Default format is single elimination unless selected or later changed.
+The default tournament format is single elimination.

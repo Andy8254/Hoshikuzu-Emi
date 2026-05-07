@@ -1,11 +1,9 @@
-# /mod warn
-Records a warning for a user.
-
+﻿# /mod warn
+Records a warning for the selected user.
 ## Usage
 `/mod warn user:<user> reason:<reason>`
-
 ## Details
-Use for behavior that should be visible in moderation history but does not need immediate platform action.
-
+Use when behaviour does not need immediate platform action, but should remain visible in the server database.
 ## Notes
-Write reasons as if another staff member will read them later.
+Write the reason so another moderator can understand the decision later.
+Keep the wording plain and easy to review.

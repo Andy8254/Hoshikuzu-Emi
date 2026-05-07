@@ -1,11 +1,8 @@
-# /tournament config clear_channel
+﻿# /tournament config clear_channel
 Clears the tournament panel channel.
-
 ## Usage
 `/tournament config clear_channel`
-
 ## Details
-Stops the bot from knowing where to post future tournament panels.
-
+Prevents the bot from posting future tournament panels to a configured channel.
 ## Notes
 Existing panel messages are not deleted.

@@ -56,7 +56,13 @@ std::optional<TetrioProfile> TetrioService::fetch_user(const std::string& userna
         "https://ch.tetr.io/api/users/" + profile.id + "/summaries/league"
     );
 
-    if (league_res.error.empty() && league_res.status_code == 200) {
+    if (!league_res.error.empty()) {
+        profile.league_status = "league_fetch_failed";
+    }
+    else if (league_res.status_code != 200) {
+        profile.league_status = "league_http_" + std::to_string(league_res.status_code);
+    }
+    else {
         json league_j = json::parse(league_res.body, nullptr, false);
 
         if (!league_j.is_discarded()
@@ -67,6 +73,7 @@ std::optional<TetrioProfile> TetrioService::fetch_user(const std::string& userna
             const auto& league = league_j["data"];
 
             profile.has_league_data = true;
+            profile.league_status = "league_ok";
 
             profile.rating = get_double(league, "tr");
             profile.rank = get_string(league, "rank", "Z");
@@ -92,6 +99,15 @@ std::optional<TetrioProfile> TetrioService::fetch_user(const std::string& userna
             profile.apm = get_double(league, "apm");
             profile.pps = get_double(league, "pps");
             profile.vs = get_double(league, "vs");
+        }
+        else if (league_j.is_discarded()) {
+            profile.league_status = "league_parse_failed";
+        }
+        else if (!ok_response(league_j)) {
+            profile.league_status = "league_success_false";
+        }
+        else {
+            profile.league_status = "league_data_missing";
         }
     }
 

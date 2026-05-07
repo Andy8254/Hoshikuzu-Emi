@@ -1,11 +1,8 @@
-# /tournament config ruleset_clear_secondary
-Disables secondary match rules.
-
+﻿# /tournament config ruleset_clear_secondary
+Disables the tournament's second ruleset.
 ## Usage
 `/tournament config ruleset_clear_secondary id:<id>`
-
 ## Details
-Removes the secondary ruleset so primary rules apply throughout.
-
+Removes the second ruleset so the first ruleset applies throughout the tournament.
 ## Notes
 Use before matches begin when possible.

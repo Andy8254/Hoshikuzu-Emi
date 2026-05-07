@@ -1,11 +1,9 @@
-# /settings modlog_set
-Sets the moderation log channel.
-
+﻿# /settings modlog_set
+Sets the moderation log channel to the selected channel.
 ## Usage
 `/settings modlog_set channel:<channel>`
-
 ## Details
-Moderation actions and staff records can be sent here for audit visibility.
-
+Moderation actions and staff records can be sent to the selected channel.
 ## Notes
-Use a private staff channel if reasons may contain sensitive context.
+Moderation logs may contain sensitive context.
+For server safety, use a private staff channel whenever possible.
