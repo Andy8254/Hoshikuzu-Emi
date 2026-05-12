@@ -16,6 +16,7 @@ int main(int argc, char** argv) {
         return sql_reliability::run(db_path);
     }
 
+    load_default_env_file();
     dpp::cluster bot(get_bot_token());
 
     register_general_commands(bot);

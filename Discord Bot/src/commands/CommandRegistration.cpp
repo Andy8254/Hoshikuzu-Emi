@@ -311,6 +311,21 @@ void register_discord_commands(dpp::cluster& bot, dpp::snowflake mod_channel_id)
             seed.add_option(add_rating_bucket_choices(seed_bucket));
             tournament.add_option(seed);
 
+            dpp::command_option seed_export(dpp::co_sub_command, "seed_export", "Export seeded player info as CSV");
+            seed_export.add_option(dpp::command_option(dpp::co_integer, "id", "Tournament ID", true));
+            seed_export.add_option(dpp::command_option(dpp::co_string, "mode", "Seeding mode", false)
+                .add_choice(dpp::command_option_choice("General", "general"))
+                .add_choice(dpp::command_option_choice("TETR.IO", "tetrio"))
+                .add_choice(dpp::command_option_choice("Manual Rating", "rating")));
+            dpp::command_option seed_export_bucket(dpp::co_string, "bucket", "Manual rating bucket for rating seeding", false);
+            seed_export.add_option(add_rating_bucket_choices(seed_export_bucket));
+            tournament.add_option(seed_export);
+
+            dpp::command_option seed_import(dpp::co_sub_command, "seed_import", "Import a reordered seed CSV");
+            seed_import.add_option(dpp::command_option(dpp::co_integer, "id", "Tournament ID", true));
+            seed_import.add_option(dpp::command_option(dpp::co_attachment, "file", "CSV file exported from seed_export or a username-only CSV", true));
+            tournament.add_option(seed_import);
+
             dpp::command_option bracket(dpp::co_sub_command_group, "bracket", "Bracket and match operations");
 
             dpp::command_option bracket_generate(dpp::co_sub_command, "generate", "Generate a bracket and queue current match threads");

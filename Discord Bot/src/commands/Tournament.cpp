@@ -1,5 +1,6 @@
 #include "core/CommandRegistry.hpp"
 #include "core/Localization.hpp"
+#include "core/api_fetcher.hpp"
 #include "core/security/PermissionManager.hpp"
 #include "core/sqlite.hpp"
 #include "tournament/bracket/MatchStore.hpp"
@@ -14,6 +15,8 @@
 #include <cctype>
 #include <ctime>
 #include <iomanip>
+#include <map>
+#include <set>
 #include <sstream>
 
 namespace {
@@ -89,6 +92,36 @@ namespace {
 		}
 
 		return std::get<dpp::snowflake>(option->value);
+	}
+
+	std::string trim_copy(std::string value) {
+		if (!value.empty()
+			&& static_cast<unsigned char>(value[0]) == 0xEF
+			&& value.size() >= 3
+			&& static_cast<unsigned char>(value[1]) == 0xBB
+			&& static_cast<unsigned char>(value[2]) == 0xBF) {
+			value.erase(0, 3);
+		}
+
+		const auto first = std::find_if_not(value.begin(), value.end(), [](unsigned char c) {
+			return std::isspace(c) != 0;
+		});
+		const auto last = std::find_if_not(value.rbegin(), value.rend(), [](unsigned char c) {
+			return std::isspace(c) != 0;
+		}).base();
+
+		if (first >= last) {
+			return "";
+		}
+
+		return std::string(first, last);
+	}
+
+	std::string lower_copy(std::string value) {
+		std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+			return static_cast<char>(std::tolower(c));
+		});
+		return value;
 	}
 
 	std::string channel_display(dpp::snowflake channel_id) {
@@ -220,6 +253,126 @@ namespace {
 		}
 		escaped += "\"";
 		return escaped;
+	}
+
+	std::vector<std::vector<std::string>> parse_csv(const std::string& csv) {
+		std::vector<std::vector<std::string>> rows;
+		std::vector<std::string> row;
+		std::string field;
+		bool quoted = false;
+
+		for (std::size_t i = 0; i < csv.size(); ++i) {
+			const char c = csv[i];
+			if (quoted) {
+				if (c == '"') {
+					if (i + 1 < csv.size() && csv[i + 1] == '"') {
+						field += '"';
+						++i;
+					}
+					else {
+						quoted = false;
+					}
+				}
+				else {
+					field += c;
+				}
+				continue;
+			}
+
+			if (c == '"') {
+				quoted = true;
+			}
+			else if (c == ',') {
+				row.push_back(field);
+				field.clear();
+			}
+			else if (c == '\n') {
+				row.push_back(field);
+				field.clear();
+				rows.push_back(row);
+				row.clear();
+			}
+			else if (c != '\r') {
+				field += c;
+			}
+		}
+
+		row.push_back(field);
+		if (row.size() > 1 || !trim_copy(row.front()).empty()) {
+			rows.push_back(row);
+		}
+
+		return rows;
+	}
+
+	std::string participant_username(const tournament_registration::ParticipantRecord& participant) {
+		return participant.tetrio_id.empty() ? participant.provided_username : participant.tetrio_id;
+	}
+
+	bool row_is_empty(const std::vector<std::string>& row) {
+		for (const std::string& value : row) {
+			if (!trim_copy(value).empty()) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	std::vector<std::string> usernames_from_seed_csv(const std::string& csv, std::string& error) {
+		std::vector<std::string> usernames;
+		std::vector<std::vector<std::string>> rows = parse_csv(csv);
+		while (!rows.empty() && row_is_empty(rows.front())) {
+			rows.erase(rows.begin());
+		}
+
+		if (rows.empty()) {
+			error = "CSV is empty.";
+			return usernames;
+		}
+
+		int username_col = 0;
+		std::size_t start_row = 0;
+		std::map<std::string, int> header;
+		for (int i = 0; i < static_cast<int>(rows.front().size()); ++i) {
+			header[lower_copy(trim_copy(rows.front()[i]))] = i;
+		}
+
+		const char* username_headers[] = { "username", "tetrio_id", "provided_username", "player", "name" };
+		for (const char* name : username_headers) {
+			auto it = header.find(name);
+			if (it != header.end()) {
+				username_col = it->second;
+				start_row = 1;
+				break;
+			}
+		}
+
+		for (std::size_t i = start_row; i < rows.size(); ++i) {
+			if (row_is_empty(rows[i])) {
+				continue;
+			}
+
+			if (username_col >= static_cast<int>(rows[i].size())) {
+				error = "CSV row " + std::to_string(i + 1) + " is missing the username column.";
+				usernames.clear();
+				return usernames;
+			}
+
+			const std::string username = trim_copy(rows[i][username_col]);
+			if (username.empty()) {
+				error = "CSV row " + std::to_string(i + 1) + " has an empty username.";
+				usernames.clear();
+				return usernames;
+			}
+
+			usernames.push_back(username);
+		}
+
+		if (usernames.empty()) {
+			error = "CSV does not contain any usernames.";
+		}
+
+		return usernames;
 	}
 
 	bool tetrio_filters_active(const tournament_seeding::TetrioSeedFilters& filters) {
@@ -369,9 +522,10 @@ namespace {
 		const dpp::slashcommand_t& event,
 		const std::string& content,
 		const std::string& filename,
-		const std::string& filecontent
+		const std::string& filecontent,
+		const std::string& content_type = "image/svg+xml"
 	) {
-		event.edit_response(dpp::message(content).add_file(filename, filecontent, "image/svg+xml"));
+		event.edit_response(dpp::message(content).add_file(filename, filecontent, content_type));
 	}
 
 	void log_tournament_event(
@@ -1020,15 +1174,19 @@ namespace {
 		edit_logged(event, participant_summary(participants));
 	}
 
-	void handle_seed(const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
-		if (!require_manage(event)) return;
-		event.thinking(false);
+	struct SeedBuildResult {
+		bool ok = false;
+		std::vector<tournament_seeding::SeededPlayer> seeded;
+		std::vector<tournament_seeding::ExcludedPlayer> excluded;
+		std::string error;
+	};
 
-		const int tournament_id = get_int_option(subcommand, "id");
+	SeedBuildResult build_seeded_players(int tournament_id, const dpp::command_data_option& subcommand) {
+		SeedBuildResult output;
 		const auto tournament = tournament_manage::get_tournament(tournament_id);
 		if (!tournament) {
-			edit_logged(event, "Tournament not found.");
-			return;
+			output.error = "Tournament not found.";
+			return output;
 		}
 
 		const bool rating_game = tournament->game_type == "tec" || tournament->game_type == "ppt2";
@@ -1040,12 +1198,10 @@ namespace {
 
 		auto participants = tournament_registration::list_checked_in_participants(tournament_id);
 
-		std::vector<tournament_seeding::SeededPlayer> seeded;
-		std::vector<tournament_seeding::ExcludedPlayer> excluded;
 		if (mode == "tetrio") {
 			auto result = tournament_seeding::seed_tetrio_with_filters(participants, tournament->tetrio_filters);
-			seeded = std::move(result.seeded);
-			excluded = std::move(result.excluded);
+			output.seeded = std::move(result.seeded);
+			output.excluded = std::move(result.excluded);
 		}
 		else if (mode == "rating") {
 			if (rating_bucket.empty()) {
@@ -1053,45 +1209,188 @@ namespace {
 			}
 
 			if (!valid_rating_bucket(rating_bucket)) {
-				edit_logged(event, "Invalid rating bucket.");
-				return;
+				output.error = "Invalid rating bucket.";
+				return output;
 			}
 
 			if (!rating_bucket_matches_game(tournament->game_type, rating_bucket)) {
-				edit_logged(event, "Rating bucket `" + rating_bucket_display(rating_bucket) + "` does not match this tournament's game type.");
-				return;
+				output.error = "Rating bucket `" + rating_bucket_display(rating_bucket) + "` does not match this tournament's game type.";
+				return output;
 			}
 
 			auto result = tournament_seeding::seed_by_rating(participants, rating_bucket);
-			seeded = std::move(result.seeded);
-			excluded = std::move(result.excluded);
+			output.seeded = std::move(result.seeded);
+			output.excluded = std::move(result.excluded);
 		}
 		else {
-			seeded = tournament_seeding::seed_general(participants);
+			output.seeded = tournament_seeding::seed_general(participants);
 		}
 
-		for (const auto& player : seeded) {
+		output.ok = true;
+		return output;
+	}
+
+	void handle_seed(const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
+		if (!require_manage(event)) return;
+		event.thinking(false);
+
+		const int tournament_id = get_int_option(subcommand, "id");
+		SeedBuildResult result = build_seeded_players(tournament_id, subcommand);
+		if (!result.ok) {
+			edit_logged(event, result.error);
+			return;
+		}
+
+		for (const auto& player : result.seeded) {
 			tournament_registration::set_participant_seed(tournament_id, player.discord_id, player.seed);
 		}
 
-		std::string csv = tournament_seeding::export_seed_csv(seeded);
+		std::string csv = tournament_seeding::export_seed_csv(result.seeded);
 		if (csv.size() > 1800) {
 			csv.resize(1800);
 			csv += "\n...";
 		}
 
 		const std::string message = "Seeding complete.\n```csv\n" + csv + "```";
-		if (!excluded.empty()) {
-			std::string excluded_csv = tournament_seeding::export_excluded_csv(excluded);
+		if (!result.excluded.empty()) {
+			std::string excluded_csv = tournament_seeding::export_excluded_csv(result.excluded);
 			if (excluded_csv.size() > 900) {
 				excluded_csv.resize(900);
 				excluded_csv += "\n...";
 			}
-			edit_logged(event, message + "\nExcluded by TETR.IO restrictions:\n```csv\n" + excluded_csv + "```");
+			edit_logged(event, message + "\nExcluded during seeding:\n```csv\n" + excluded_csv + "```");
 			return;
 		}
 
 		edit_logged(event, message);
+	}
+
+	void handle_seed_export(const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
+		if (!require_manage(event)) return;
+		event.thinking(false);
+
+		const int tournament_id = get_int_option(subcommand, "id");
+		SeedBuildResult result = build_seeded_players(tournament_id, subcommand);
+		if (!result.ok) {
+			edit_logged(event, result.error);
+			return;
+		}
+
+		std::string csv = tournament_seeding::export_seed_csv(result.seeded);
+		const std::string note = result.excluded.empty()
+			? "Seed CSV exported. Reorder the player rows, keep the usernames unchanged, then import it with `/tournament seed_import`."
+			: "Seed CSV exported. Excluded players were not included in the file. Reorder the player rows, keep the usernames unchanged, then import it with `/tournament seed_import`.";
+
+		edit_logged_file(
+			event,
+			note,
+			"tournament-" + std::to_string(tournament_id) + "-seeds.csv",
+			csv,
+			"text/csv"
+		);
+	}
+
+	void handle_seed_import(const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
+		if (!require_manage(event)) return;
+		event.thinking(false);
+
+		const int tournament_id = get_int_option(subcommand, "id");
+		const dpp::snowflake attachment_id = get_snowflake_option(subcommand, "file");
+		if (!attachment_id) {
+			edit_logged(event, "Attach a CSV file to import.");
+			return;
+		}
+
+		dpp::attachment attachment(nullptr);
+		try {
+			attachment = event.command.get_resolved_attachment(attachment_id);
+		}
+		catch (...) {
+			edit_logged(event, "Could not read the uploaded CSV attachment.");
+			return;
+		}
+
+		if (attachment.size > 1024 * 1024) {
+			edit_logged(event, "CSV import is limited to 1 MiB.");
+			return;
+		}
+
+		HttpResponse file_response = HttpClient::get(attachment.url);
+		if (!file_response.error.empty() || file_response.status_code != 200) {
+			edit_logged(event, "Could not download the CSV attachment.");
+			return;
+		}
+
+		std::string parse_error;
+		std::vector<std::string> imported_usernames = usernames_from_seed_csv(file_response.body, parse_error);
+		if (!parse_error.empty()) {
+			edit_logged(event, parse_error);
+			return;
+		}
+
+		const auto participants = tournament_registration::list_checked_in_participants(tournament_id);
+		if (participants.empty()) {
+			edit_logged(event, "No checked-in participants found for this tournament.");
+			return;
+		}
+
+		std::map<std::string, tournament_registration::ParticipantRecord> by_username;
+		std::set<std::string> expected_keys;
+		for (const auto& participant : participants) {
+			const std::string username = trim_copy(participant_username(participant));
+			const std::string key = lower_copy(username);
+			if (key.empty()) {
+				edit_logged(event, "A checked-in participant is missing username data; seed import cannot continue.");
+				return;
+			}
+
+			if (expected_keys.contains(key)) {
+				edit_logged(event, "Duplicate tournament username data found for `" + username + "`; seed import cannot continue.");
+				return;
+			}
+
+			expected_keys.insert(key);
+			by_username[key] = participant;
+		}
+
+		std::set<std::string> imported_keys;
+		std::vector<tournament_registration::ParticipantRecord> ordered;
+		for (const std::string& username : imported_usernames) {
+			const std::string key = lower_copy(trim_copy(username));
+			if (imported_keys.contains(key)) {
+				edit_logged(event, "CSV contains duplicate username `" + username + "`.");
+				return;
+			}
+
+			auto participant = by_username.find(key);
+			if (participant == by_username.end()) {
+				edit_logged(event, "CSV username `" + username + "` does not match a checked-in tournament participant.");
+				return;
+			}
+
+			imported_keys.insert(key);
+			ordered.push_back(participant->second);
+		}
+
+		if (imported_keys != expected_keys) {
+			for (const std::string& expected : expected_keys) {
+				if (!imported_keys.contains(expected)) {
+					edit_logged(event, "CSV is missing tournament username `" + participant_username(by_username[expected]) + "`.");
+					return;
+				}
+			}
+			edit_logged(event, "CSV usernames do not match the checked-in tournament participants.");
+			return;
+		}
+
+		for (int i = 0; i < static_cast<int>(ordered.size()); ++i) {
+			if (!tournament_registration::set_participant_seed(tournament_id, ordered[i].discord_id, i + 1)) {
+				edit_logged(event, "Seed import validation passed, but applying seed `" + std::to_string(i + 1) + "` failed.");
+				return;
+			}
+		}
+
+		edit_logged(event, "Seed import complete. Applied `" + std::to_string(ordered.size()) + "` seed position(s).");
 	}
 
 	int queue_match_threads(
@@ -1990,6 +2289,8 @@ void register_tournament_commands(dpp::cluster& bot) {
 		if (subcommand.name == "checkin") return handle_checkin(bot, event, subcommand);
 		if (subcommand.name == "participants") return handle_participants(event, subcommand);
 		if (subcommand.name == "seed") return handle_seed(event, subcommand);
+		if (subcommand.name == "seed_export") return handle_seed_export(event, subcommand);
+		if (subcommand.name == "seed_import") return handle_seed_import(event, subcommand);
 		if (subcommand.name == "call_staff") return handle_call_staff(bot, event, subcommand);
 		if (subcommand.name == "bracket_generate") return handle_bracket_generate(bot, event, subcommand);
 		if (subcommand.name == "matches_current") return handle_matches_current(event, subcommand);

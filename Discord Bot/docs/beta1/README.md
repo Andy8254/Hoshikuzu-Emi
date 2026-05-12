@@ -23,6 +23,15 @@ This is not a public stable release. It is a bridge from alpha2 toward beta1.
 7. Canary deployment with Hoshikuzu Hami
 8. Beta test events
 
+## Real Tournament Operations
+
+For beta1 live tournament management, use:
+
+- `docs/beta1/tournament_management_flow_en.md`
+- `docs/beta1/tournament_management_flow_ko.md`
+
+These guides cover staff setup, registration, check-in, seeding, CSV seed review, bracket operation, no-show/forfeit handling, SVG exports, emergency fallback, and troubleshooting.
+
 ## Development Posture
 
 Alpha asked: can this exist?
@@ -44,6 +53,8 @@ Read these files first:
 - `docs/beta1/policy_alignment.md`
 - `docs/beta1/test_plan.md`
 - `docs/beta1/dev1_backend_notes.md`
+- `docs/beta1/tournament_management_flow_en.md`
+- `docs/beta1/tournament_management_flow_ko.md`
 - `docs/conventions/backend.md`
 - `docs/conventions/commands.md`
 - `docs/conventions/messages.md`

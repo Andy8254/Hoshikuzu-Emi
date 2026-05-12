@@ -1,5 +1,6 @@
 #include "core/SqlReliabilityCheck.hpp"
 #include "core/sqlite.hpp"
+#include "misc/sqlite-user.hpp"
 #include "tournament/bracket/MatchStore.hpp"
 #include "tournament/manage.hpp"
 #include "tournament/registration.hpp"
@@ -402,6 +403,66 @@ namespace {
 			"uncommitted transaction rolled back"
 		);
 	}
+
+	bool run_user_db_isolation_probe(CheckContext& ctx, const std::string& db_path) {
+		const std::string user_db_path = db_path + ".user";
+		if (!ctx.require(reset_throwaway_db(user_db_path), "reset isolated user database")) {
+			return false;
+		}
+
+		misc_user_sqlite::UserDatabase user_db(user_db_path);
+		if (!ctx.require(user_db.ok(), "open isolated user database")) {
+			return false;
+		}
+
+		int table_count = -1;
+		ctx.require(
+			scalar_int(
+				user_db.get_handle(),
+				"SELECT COUNT(*) FROM sqlite_master WHERE type = 'table';",
+				table_count
+			) && table_count == 0,
+			"isolated user database starts with no tables"
+		);
+
+		ctx.require(user_db.execute(
+			"CREATE TABLE misc_extension_probe ("
+			"id INTEGER PRIMARY KEY, "
+			"value TEXT NOT NULL"
+			");"
+		), "create isolated user extension table");
+		ctx.require(user_db.add_column_if_missing("misc_extension_probe", "note TEXT DEFAULT ''"), "migrate isolated user extension table");
+		ctx.require(user_db.create_index_if_missing(
+			"idx_misc_extension_probe_value",
+			"misc_extension_probe",
+			"value"
+		), "create isolated user extension index");
+
+		{
+			misc_user_sqlite::UserDatabaseTransaction transaction(user_db);
+			if (!ctx.require(transaction.ok(), "start isolated user database transaction")) {
+				return false;
+			}
+
+			ctx.require(user_db.execute("INSERT INTO misc_extension_probe (id, value) VALUES (1, 'rollback');"), "insert isolated rollback probe row");
+		}
+
+		int rollback_count = -1;
+		ctx.require(
+			scalar_int(
+				user_db.get_handle(),
+				"SELECT COUNT(*) FROM misc_extension_probe WHERE id = 1;",
+				rollback_count
+			) && rollback_count == 0,
+			"isolated user database transaction rolls back"
+		);
+
+		std::string quick_check;
+		return ctx.require(
+			scalar_text(user_db.get_handle(), "PRAGMA quick_check;", quick_check) && quick_check == "ok",
+			"isolated user database quick_check is ok"
+		);
+	}
 }
 
 int sql_reliability::run(const std::string& db_path) {
@@ -502,6 +563,7 @@ int sql_reliability::run(const std::string& db_path) {
 
 	run_representative_flow(ctx);
 	run_rollback_probe(ctx, audit_db);
+	run_user_db_isolation_probe(ctx, db_path);
 
 	std::string quick_check;
 	ctx.require(
