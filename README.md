@@ -33,6 +33,9 @@ Running this service on a standard desktop PC 24/7 can be significantly more exp
 
 **Please do note that all third-party libraries listed in LICENSE.md must be installed on the host server machine before initialisation for proper use.**
 
+**Triangle.js (used for automated room creation) is not vendored in this repository by default. The optional bridge declares `@haelp/teto` as an npm dependency, and operators install it locally when enabling room automation.**
+
+
 
 ---
 
