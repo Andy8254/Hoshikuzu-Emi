@@ -48,6 +48,7 @@ SQLite is released into the public domain. To the extent possible under law, its
 
 ### Triangle.js / @haelp/teto
 Copyright (c) 2025 halp
+
 Triangle.js is used as an optional sidecar dependency for TETR.IO room automation.
 
 Repository: https://github.com/halp1/triangle
