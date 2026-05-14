@@ -31,7 +31,7 @@ The Core version of this service is designed to utilise your host machine's loca
 
 Running this service on a standard desktop PC 24/7 can be significantly more expensive (est. 10x higher power draw) compared to the Pi 5's ultra-efficient ~3,000 KRW/month operating cost.
 
-**Please do note that all third-party libraries listed in LICENSE.md must be installed on the host server machine before initialisation for proper use.**
+**Please do note that all third-party libraries listed in `LICENSE.md` must be installed on the host server machine before initialisation for proper use.**
 
 **Triangle.js (used for automated room creation) is not vendored in this repository by default. The optional bridge declares `@haelp/teto` as an npm dependency, and operators install it locally when enabling room automation.**
 
