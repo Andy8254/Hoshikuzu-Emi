@@ -45,3 +45,15 @@ License: Public Domain
 Source: https://www.sqlite.org/
 
 SQLite is released into the public domain. To the extent possible under law, its authors have waived all copyright and related rights.
+
+### Triangle.js / @haelp/teto
+Copyright (c) 2025 halp
+Triangle.js is used as an optional sidecar dependency for TETR.IO room automation.
+
+Repository: https://github.com/halp1/triangle
+Documentation: https://triangle.haelp.dev/
+Package: @haelp/teto
+License: MIT
+
+The MIT License notice from Triangle.js is included in third_party/triangle/LICENSE.md.
+
