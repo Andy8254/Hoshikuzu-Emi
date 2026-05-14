@@ -1,7 +1,7 @@
 # Hoshikuzu Emi
 An all-in-one tournament/community management bot agent
 
-Version Beta 1 Interim 2 (v. 0.5.2)
+Version Beta 1 Interim 4 (v. 0.5.4)
 
 ## Overview
 This lightweight C++-based bot agent provides all-in-one management tailored to tournaments and e-sports-centric servers.
@@ -13,12 +13,15 @@ All supported features in the Core version are as follows:
 - Help Page
 - Player Information Finder (Basic - 1.0.0) (SQLite-based)
 - TETR.IO Profile System (Basic - 1.0.0)
-
-## In development
 - Internal Tree-based Bracket Management without the use of external APIs
 - Moderation Feature
 - Visualisation
 - Module-based UI Language System & Multilingual Support (Korean)
+
+## In development
+- SVG Customisation
+- Encryption Hardening
+- etc...
 
 ## Licence
 This service (Core version) is distributed under the MIT licence.
