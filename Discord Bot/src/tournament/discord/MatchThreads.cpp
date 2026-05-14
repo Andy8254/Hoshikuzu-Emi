@@ -1,6 +1,7 @@
 #include "tournament/discord/MatchThreads.hpp"
 #include "core/Localization.hpp"
 #include "tournament/matchmaking.hpp"
+#include "tournament/tetrio/triangle/RoomAutomation.hpp"
 #include <ctime>
 #include <string>
 
@@ -101,7 +102,8 @@ void tournament_discord::create_match_thread(
 	dpp::snowflake guild_id,
 	dpp::snowflake channel_id,
 	const tournament_bracket::StoredMatch& match,
-	bool include_buttons
+	bool include_buttons,
+	bool create_tetrio_room
 ) {
 	bot.thread_create(
 		match_thread_name(match),
@@ -110,7 +112,7 @@ void tournament_discord::create_match_thread(
 		dpp::CHANNEL_PUBLIC_THREAD,
 		true,
 		0,
-		[&bot, guild_id, match, include_buttons](const dpp::confirmation_callback_t& cb) {
+		[&bot, guild_id, match, include_buttons, create_tetrio_room](const dpp::confirmation_callback_t& cb) {
 			if (cb.is_error()) {
 				return;
 			}
@@ -123,7 +125,17 @@ void tournament_discord::create_match_thread(
 				static_cast<int>(time(nullptr)),
 				tournament_matchmaking::DEFAULT_MATCH_GRACE_TIME
 			);
-			bot.message_create(build_match_message(guild_id, match, include_buttons).set_channel_id(thread.id));
+
+			dpp::message message = build_match_message(guild_id, match, include_buttons).set_channel_id(thread.id);
+			if (create_tetrio_room) {
+				const auto room = tournament_tetrio_triangle::create_room_for_match(match);
+				const std::string room_text = tournament_tetrio_triangle::room_message_text(room);
+				if (!room_text.empty()) {
+					message.content += room_text;
+				}
+			}
+
+			bot.message_create(message);
 
 			if (!match.player_a_id.empty()) {
 				bot.thread_member_add(thread.id, dpp::snowflake(match.player_a_id));

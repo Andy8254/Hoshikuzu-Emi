@@ -378,6 +378,7 @@ void register_discord_commands(dpp::cluster& bot, dpp::snowflake mod_channel_id)
             bracket_threads.add_option(dpp::command_option(dpp::co_integer, "id", "Tournament ID", true));
             bracket_threads.add_option(dpp::command_option(dpp::co_integer, "round", "Round number, or omit for current matches", false));
             bracket_threads.add_option(dpp::command_option(dpp::co_boolean, "buttons", "Add check-in/report buttons", false));
+            bracket_threads.add_option(dpp::command_option(dpp::co_boolean, "rooms", "Request automatic TETR.IO room creation through Triangle bridge", false));
             bracket.add_option(bracket_threads);
 
             dpp::command_option stream_assign(dpp::co_sub_command, "stream_assign", "Assign a match to stream");

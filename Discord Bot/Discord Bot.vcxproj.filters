@@ -102,6 +102,9 @@
     <ClCompile Include="src\tournament\seeding.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\tournament\tetrio\triangle\RoomAutomation.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="src\tournament\utility\BracketSvg.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -186,6 +189,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\tournament\tournament\MatchRules.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\tournament\tetrio\triangle\RoomAutomation.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\tournament\utility\BracketSvg.hpp">

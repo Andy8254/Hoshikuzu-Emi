@@ -1,0 +1,16 @@
+{
+  "name": "hoshikuzu-triangle-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local Triangle.js bridge for optional TETR.IO room automation.",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "@haelp/teto": "^4.2.6"
+  },
+  "engines": {
+    "node": ">=22.4.0"
+  }
+}

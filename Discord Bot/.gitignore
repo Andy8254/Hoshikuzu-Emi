@@ -7,6 +7,7 @@ config.json
 x64/
 Debug/
 Release/
+node_modules/
 
 # VS
 .vs/

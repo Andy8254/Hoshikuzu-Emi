@@ -39,3 +39,43 @@ HttpResponse HttpClient::get(const std::string& url) {
 	curl_easy_cleanup(curl);
 	return response;
 }
+
+HttpResponse HttpClient::post_json(const std::string& url, const std::string& json_body) {
+	CURL* curl = curl_easy_init();
+	HttpResponse response{};
+
+	if (!curl) {
+		response.error = "Failed to init CURL";
+		return response;
+	}
+
+	std::string buffer;
+	curl_slist* headers = nullptr;
+	headers = curl_slist_append(headers, "Content-Type: application/json");
+	headers = curl_slist_append(headers, "Accept: application/json");
+
+	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+	curl_easy_setopt(curl, CURLOPT_POST, 1L);
+	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+	curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_body.c_str());
+	curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(json_body.size()));
+	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &buffer);
+	curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
+	curl_easy_setopt(curl, CURLOPT_USERAGENT, "Hoshikuzu-Emi/1.0");
+	curl_easy_setopt(curl, CURLOPT_PROXY, "");
+
+	CURLcode res = curl_easy_perform(curl);
+
+	if (res != CURLE_OK) {
+		response.error = curl_easy_strerror(res);
+	}
+	else {
+		curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response.status_code);
+		response.body = buffer;
+	}
+
+	curl_slist_free_all(headers);
+	curl_easy_cleanup(curl);
+	return response;
+}

@@ -1398,7 +1398,8 @@ namespace {
 		dpp::snowflake guild_id,
 		dpp::snowflake channel_id,
 		const std::vector<tournament_bracket::StoredMatch>& matches,
-		bool include_buttons
+		bool include_buttons,
+		bool create_tetrio_rooms = false
 	) {
 		int queued = 0;
 		for (const auto& match : matches) {
@@ -1406,7 +1407,7 @@ namespace {
 				continue;
 			}
 
-			tournament_discord::create_match_thread(bot, guild_id, channel_id, match, include_buttons);
+			tournament_discord::create_match_thread(bot, guild_id, channel_id, match, include_buttons, create_tetrio_rooms);
 			++queued;
 		}
 
@@ -1469,7 +1470,8 @@ namespace {
 				event.command.guild_id,
 				channel_id,
 				tournament_bracket::list_current_matches(tournament_id),
-				true
+				true,
+				false
 			);
 			message += "\n" + localization::guild_text(
 				event.command.guild_id,
@@ -1699,6 +1701,7 @@ namespace {
 		const int tournament_id = get_int_option(subcommand, "id");
 		const int round = get_int_option(subcommand, "round", 0);
 		const bool include_buttons = get_bool_option(subcommand, "buttons", true);
+		const bool create_tetrio_rooms = get_bool_option(subcommand, "rooms", false);
 		const dpp::snowflake channel_id = GuildConfigManager::get_tournament_channel(event.command.guild_id);
 		if (!channel_id) {
 			edit_logged(event, "Set a tournament channel first with `/tournament config set_channel`.");
@@ -1710,9 +1713,13 @@ namespace {
 			? tournament_bracket::list_round_matches(tournament_id, round - 1)
 			: tournament_bracket::list_current_matches(tournament_id);
 
-		const int queued = queue_match_threads(bot, event.command.guild_id, channel_id, matches, include_buttons);
+		const int queued = queue_match_threads(bot, event.command.guild_id, channel_id, matches, include_buttons, create_tetrio_rooms);
 
-		edit_logged(event, "Queued `" + std::to_string(queued) + "` match thread creation request(s).");
+		std::string message = "Queued `" + std::to_string(queued) + "` match thread creation request(s).";
+		if (create_tetrio_rooms) {
+			message += "\nTETR.IO room automation was requested. It only runs when `BOT_ENABLE_TETRIO_ROOM_AUTOMATION=true` and the Triangle bridge is reachable.";
+		}
+		edit_logged(event, message);
 	}
 
 	void handle_bracket_svg(const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {

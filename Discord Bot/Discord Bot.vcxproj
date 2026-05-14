@@ -50,6 +50,7 @@
     <ClInclude Include="include\tournament\Tournaments.hpp" />
     <ClInclude Include="include\tournament\tournament\base.hpp" />
     <ClInclude Include="include\tournament\tournament\MatchRules.hpp" />
+    <ClInclude Include="include\tournament\tetrio\triangle\RoomAutomation.hpp" />
     <ClInclude Include="include\tournament\utility\BracketSvg.hpp" />
   </ItemGroup>
   <ItemGroup>
@@ -85,6 +86,7 @@
     <ClCompile Include="src\tournament\registration.cpp" />
     <ClCompile Include="src\tournament\ruleset.cpp" />
     <ClCompile Include="src\tournament\seeding.cpp" />
+    <ClCompile Include="src\tournament\tetrio\triangle\RoomAutomation.cpp" />
     <ClCompile Include="src\tournament\TournamentService.cpp" />
     <ClCompile Include="src\tournament\utility\BracketSvg.cpp" />
   </ItemGroup>

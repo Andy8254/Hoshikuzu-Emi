@@ -12,6 +12,7 @@ namespace tournament_discord {
 		dpp::snowflake guild_id,
 		dpp::snowflake channel_id,
 		const tournament_bracket::StoredMatch& match,
-		bool include_buttons
+		bool include_buttons,
+		bool create_tetrio_room = false
 	);
 }
