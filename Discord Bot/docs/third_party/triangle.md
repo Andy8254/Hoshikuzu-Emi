@@ -26,13 +26,15 @@ License:
 MIT
 ```
 
-Downloaded source location:
+Committed integration location:
 
 ```text
-third_party/triangle
+tools/triangle-bridge
 ```
 
-The downloaded repository includes its own `LICENSE.md`. Preserve that notice when redistributing any vendored copy.
+The bridge consumes Triangle.js through the `@haelp/teto` npm package. A local checkout of `https://github.com/halp1/triangle` may be used as a development reference, but it is not required for the C++ bot build.
+
+Preserve Triangle.js' MIT license notice when redistributing the npm package, a vendored copy, or source-derived code.
 
 ## TETR.IO API Warning
 

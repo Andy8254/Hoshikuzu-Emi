@@ -35,6 +35,11 @@ BOT_USER_DB_PATH=db/user.db
 BOT_ENABLE_MISC_EXAMPLES=false
 BOT_ENABLE_TETRIO_ROOM_AUTOMATION=false
 TRIANGLE_BRIDGE_URL=http://127.0.0.1:8787
+TRIANGLE_MATCH_START_GRACE_SECONDS=30
+TRIANGLE_WARMUP_MATCHES=1
+TRIANGLE_POST_WARMUP_START_DELAY_SECONDS=10
+TRIANGLE_REPLAY_DIR=db/replays/tetrio
+TRIANGLE_MAX_ACTIVE_ROOMS=1
 ```
 
 Then run the bot normally. The bot attempts to load `.env` before reading `BOT_TOKEN`.
@@ -69,6 +74,11 @@ BOT_USER_DB_PATH
 BOT_ENABLE_MISC_EXAMPLES
 BOT_ENABLE_TETRIO_ROOM_AUTOMATION
 TRIANGLE_BRIDGE_URL
+TRIANGLE_MATCH_START_GRACE_SECONDS
+TRIANGLE_WARMUP_MATCHES
+TRIANGLE_POST_WARMUP_START_DELAY_SECONDS
+TRIANGLE_REPLAY_DIR
+TRIANGLE_MAX_ACTIVE_ROOMS
 ```
 
 `BOT_TOKEN` is required for normal bot startup.
@@ -80,3 +90,13 @@ TRIANGLE_BRIDGE_URL
 `BOT_ENABLE_TETRIO_ROOM_AUTOMATION` enables the optional Triangle.js room automation integration when set to `true`, `1`, `yes`, or `on`. It is disabled by default.
 
 `TRIANGLE_BRIDGE_URL` points the C++ bot to the local Triangle bridge service. The default is `http://127.0.0.1:8787`.
+
+`TRIANGLE_MATCH_START_GRACE_SECONDS` controls the TETR.IO room auto-start delay after both invites are sent. The default is `30`.
+
+`TRIANGLE_WARMUP_MATCHES` controls automatic FT1 warm-ups before the official match. The default is `1`; set it to `0` to disable automatic warm-up matches.
+
+`TRIANGLE_POST_WARMUP_START_DELAY_SECONDS` controls the delay between the last warm-up result and the official match start. The default is `10`.
+
+`TRIANGLE_REPLAY_DIR` controls where Triangle replay exports are stored. The default is `db/replays/tetrio`.
+
+`TRIANGLE_MAX_ACTIVE_ROOMS` limits simultaneous Triangle-controlled rooms. The default is `1` because a single TETR.IO bot account and replay capture session should be treated as one active match at a time unless a deployment has been tested for higher concurrency.

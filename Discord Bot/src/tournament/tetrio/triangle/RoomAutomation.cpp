@@ -1,7 +1,10 @@
 #include "tournament/tetrio/triangle/RoomAutomation.hpp"
 
 #include "core/api_fetcher.hpp"
+#include "tournament/registration.hpp"
+#include "tournament/ruleset.hpp"
 
+#include <algorithm>
 #include <cstdlib>
 #include <sstream>
 
@@ -22,6 +25,20 @@ namespace {
 	bool env_truthy(const char* name) {
 		const std::string value = getenv_string(name);
 		return value == "1" || value == "true" || value == "TRUE" || value == "yes" || value == "on";
+	}
+
+	int getenv_int(const char* name, int fallback, int minimum = 0) {
+		const std::string value = getenv_string(name);
+		if (value.empty()) {
+			return fallback;
+		}
+
+		try {
+			return std::max(minimum, std::stoi(value));
+		}
+		catch (...) {
+			return fallback;
+		}
 	}
 
 	std::string json_escape(const std::string& value) {
@@ -87,7 +104,31 @@ namespace {
 		return value;
 	}
 
+	std::string participant_tetrio_name(int tournament_id, const std::string& discord_id) {
+		const auto participant = tournament_registration::get_participant(tournament_id, discord_id);
+		if (!participant) {
+			return discord_id;
+		}
+
+		if (!participant->tetrio_id.empty()) {
+			return participant->tetrio_id;
+		}
+
+		if (!participant->provided_username.empty()) {
+			return participant->provided_username;
+		}
+
+		return discord_id;
+	}
+
 	std::string build_room_request(const tournament_bracket::StoredMatch& match) {
+		const auto ruleset = tournament_ruleset::get_effective_primary_ruleset(match.tournament_id);
+		const std::string player_a_name = participant_tetrio_name(match.tournament_id, match.player_a_id);
+		const std::string player_b_name = participant_tetrio_name(match.tournament_id, match.player_b_id);
+		const int start_grace_seconds = getenv_int("TRIANGLE_MATCH_START_GRACE_SECONDS", 30);
+		const int warmup_matches = getenv_int("TRIANGLE_WARMUP_MATCHES", 1);
+		const int post_warmup_start_delay_seconds = getenv_int("TRIANGLE_POST_WARMUP_START_DELAY_SECONDS", 10);
+
 		std::ostringstream body;
 		body << "{"
 			<< "\"tournament_id\":" << match.tournament_id << ","
@@ -95,7 +136,13 @@ namespace {
 			<< "\"round\":" << match.round + 1 << ","
 			<< "\"position\":" << match.position + 1 << ","
 			<< "\"player_a_id\":\"" << json_escape(match.player_a_id) << "\","
-			<< "\"player_b_id\":\"" << json_escape(match.player_b_id) << "\""
+			<< "\"player_b_id\":\"" << json_escape(match.player_b_id) << "\","
+			<< "\"player_a_name\":\"" << json_escape(player_a_name) << "\","
+			<< "\"player_b_name\":\"" << json_escape(player_b_name) << "\","
+			<< "\"first_to\":" << std::max(1, ruleset.rules.win_score) << ","
+			<< "\"start_grace_seconds\":" << start_grace_seconds << ","
+			<< "\"warmup_matches\":" << warmup_matches << ","
+			<< "\"post_warmup_start_delay_seconds\":" << post_warmup_start_delay_seconds
 			<< "}";
 		return body.str();
 	}
