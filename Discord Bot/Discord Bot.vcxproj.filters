@@ -69,6 +69,12 @@
     <ClCompile Include="src\misc\sqlite-user.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\misc\isolated\youtube_randomizer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\misc\trusted\mahjong\Module.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="src\tournament\bracket\Bracket.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -147,6 +153,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\misc\sqlite-user.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\misc\isolated\youtube_randomizer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\misc\trusted\mahjong\Module.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\tournament\bracket\Bracket.hpp">

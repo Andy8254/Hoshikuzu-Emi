@@ -2,6 +2,12 @@
 
 The misc module has an isolated SQLite database for user-customizable extensions.
 
+For the general trusted/isolated command model, see:
+
+```text
+docs/operations/misc_command_trust_model.md
+```
+
 ## Purpose
 
 Use this database when an extension needs storage but should not touch core bot tables, tournament tables, moderation tables, or profile tables.

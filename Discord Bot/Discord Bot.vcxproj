@@ -32,7 +32,9 @@
     <ClInclude Include="include\core\SqlReliabilityCheck.hpp" />
     <ClInclude Include="include\core\sqlite.hpp" />
     <ClInclude Include="include\interactions\InteractionHandlers.hpp" />
+    <ClInclude Include="include\misc\isolated\youtube_randomizer.hpp" />
     <ClInclude Include="include\misc\sqlite-user.hpp" />
+    <ClInclude Include="include\misc\trusted\mahjong\Module.hpp" />
     <ClInclude Include="include\tetrio\TetrioService.hpp" />
     <ClInclude Include="include\tetrio\TetrioUtils.hpp" />
     <ClInclude Include="include\tournament\bracket\Bracket.hpp" />
@@ -73,7 +75,9 @@
     <ClCompile Include="src\core\SensitiveText.cpp" />
     <ClCompile Include="src\core\SqlReliabilityCheck.cpp" />
     <ClCompile Include="src\core\sqlite.cpp" />
+    <ClCompile Include="src\misc\isolated\youtube_randomizer.cpp" />
     <ClCompile Include="src\misc\sqlite-user.cpp" />
+    <ClCompile Include="src\misc\trusted\mahjong\Module.cpp" />
     <ClCompile Include="src\tetrio\TetrioService.cpp" />
     <ClCompile Include="src\tetrio\TetrioUtils.cpp" />
     <ClCompile Include="src\tournament\bracket\Bracket.cpp" />
