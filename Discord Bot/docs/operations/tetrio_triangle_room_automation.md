@@ -139,7 +139,6 @@ Optional bridge env:
 ```text
 TRIANGLE_ROOM_PRESET=tetra league
 TRIANGLE_FIRST_TO=2
-TRIANGLE_DEBUG_EVENTS=false
 ```
 
 `TRIANGLE_FIRST_TO` is only a fallback. The C++ bot normally sends the tournament ruleset's `win_score`.

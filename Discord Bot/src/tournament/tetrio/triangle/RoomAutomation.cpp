@@ -1,6 +1,7 @@
 #include "tournament/tetrio/triangle/RoomAutomation.hpp"
 
 #include "core/api_fetcher.hpp"
+#include "core/Log.hpp"
 #include "tournament/registration.hpp"
 #include "tournament/ruleset.hpp"
 
@@ -39,6 +40,18 @@ namespace {
 		catch (...) {
 			return fallback;
 		}
+	}
+
+	void log_triangle_action(const std::string& action, const tournament_bracket::StoredMatch& match, const std::string& detail = "") {
+		bot_log::info(
+			"triangle-room",
+			action,
+			"tournament_id=" + std::to_string(match.tournament_id) +
+			" match_id=" + std::to_string(match.id) +
+			" round=" + std::to_string(match.round + 1) +
+			" position=" + std::to_string(match.position + 1) +
+			(detail.empty() ? "" : " " + detail)
+		);
 	}
 
 	std::string json_escape(const std::string& value) {
@@ -166,15 +179,18 @@ namespace tournament_tetrio_triangle {
 		RoomCreationResult result;
 		if (!room_automation_enabled()) {
 			result.error = "TETR.IO room automation is disabled.";
+			log_triangle_action("skipped", match, "reason=disabled");
 			return result;
 		}
 
 		if (match.player_a_id.empty() || match.player_b_id.empty()) {
 			result.error = "Match is missing one or more players.";
+			log_triangle_action("skipped", match, "reason=missing_players");
 			return result;
 		}
 
 		result.attempted = true;
+		log_triangle_action("requesting_room", match, "bridge_url=" + bridge_url());
 		const HttpResponse response = HttpClient::post_json(
 			bridge_url() + "/rooms",
 			build_room_request(match)
@@ -182,11 +198,13 @@ namespace tournament_tetrio_triangle {
 
 		if (!response.error.empty()) {
 			result.error = response.error;
+			log_triangle_action("request_failed", match, "error=\"" + response.error + "\"");
 			return result;
 		}
 
 		if (response.status_code < 200 || response.status_code >= 300) {
 			result.error = "Triangle bridge returned HTTP " + std::to_string(response.status_code) + ".";
+			log_triangle_action("request_failed", match, "http_status=" + std::to_string(response.status_code));
 			return result;
 		}
 
@@ -198,10 +216,12 @@ namespace tournament_tetrio_triangle {
 
 		if (result.room_id.empty() && result.room_url.empty()) {
 			result.error = "Triangle bridge response did not include room_id or room_url.";
+			log_triangle_action("response_invalid", match);
 			return result;
 		}
 
 		result.ok = true;
+		log_triangle_action("room_created", match, "room_id=" + result.room_id + " room_url=" + result.room_url);
 		return result;
 	}
 

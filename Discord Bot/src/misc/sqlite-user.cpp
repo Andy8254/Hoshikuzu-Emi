@@ -1,8 +1,9 @@
 #include "misc/sqlite-user.hpp"
 
+#include "core/Log.hpp"
+
 #include <cstdlib>
 #include <filesystem>
-#include <iostream>
 
 namespace {
 	std::string resolve_user_db_path(const std::string& fallback) {
@@ -35,7 +36,7 @@ namespace misc_user_sqlite {
 
 		if (sqlite3_open(resolved_path.c_str(), &db) != SQLITE_OK) {
 			set_error(db ? sqlite3_errmsg(db) : "Could not allocate SQLite handle.");
-			std::cerr << "CRITICAL: user SQLite open failed: " << last_error_message << std::endl;
+			bot_log::error("user-sqlite", "open_failed", "path=" + resolved_path + " error=\"" + last_error_message + "\"");
 			if (db) {
 				sqlite3_close(db);
 				db = nullptr;
@@ -44,6 +45,7 @@ namespace misc_user_sqlite {
 		}
 
 		sqlite3_busy_timeout(db, 5000);
+		bot_log::info("user-sqlite", "open_ok", "path=" + resolved_path);
 		execute("PRAGMA foreign_keys = ON;");
 		execute("PRAGMA journal_mode = WAL;");
 		execute("PRAGMA synchronous = NORMAL;");
@@ -70,7 +72,7 @@ namespace misc_user_sqlite {
 		const int rc = sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &error);
 		if (rc != SQLITE_OK) {
 			set_error(error ? error : sqlite3_errmsg(db));
-			std::cerr << "User SQLite error: " << last_error_message << std::endl;
+			bot_log::error("user-sqlite", "execute_failed", "error=\"" + last_error_message + "\"");
 			sqlite3_free(error);
 			return false;
 		}

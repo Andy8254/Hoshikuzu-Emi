@@ -25,6 +25,7 @@
     <ClInclude Include="include\core\CommandRegistry.hpp" />
     <ClInclude Include="include\core\Config.hpp" />
     <ClInclude Include="include\core\Fundamentals.hpp" />
+    <ClInclude Include="include\core\Log.hpp" />
     <ClInclude Include="include\core\Localization.hpp" />
     <ClInclude Include="include\core\Markdown.hpp" />
     <ClInclude Include="include\core\security\PermissionManager.hpp" />

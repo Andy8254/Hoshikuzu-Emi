@@ -1,4 +1,5 @@
 #include "core/sqlite.hpp"
+#include "core/Log.hpp"
 #include "tournament/bracket/MatchStore.hpp"
 #include "tournament/bracket/Bracket.hpp"
 #include "tournament/registration.hpp"
@@ -26,6 +27,14 @@
 // standings only, and swiss_bye is an auto-completed non-reportable record.
 
 namespace {
+	void log_match_store(const std::string& action, const std::string& detail = "") {
+		bot_log::info("match-store", action, detail);
+	}
+
+	void log_match_store_error(const std::string& action, const std::string& detail = "") {
+		bot_log::error("match-store", action, detail);
+	}
+
 	Database& get_db() {
 		static Database instance("db/master.db");
 		return instance;
@@ -549,18 +558,28 @@ bool tournament_bracket::clear_matches(int tournament_id) {
 }
 
 bool tournament_bracket::generate_single_elimination(int tournament_id) {
-	return seed_bracket_matches(tournament_id, false);
+	log_match_store("generate_single_start", "tournament_id=" + std::to_string(tournament_id));
+	const bool ok = seed_bracket_matches(tournament_id, false);
+	log_match_store(ok ? "generate_single_ok" : "generate_single_failed", "tournament_id=" + std::to_string(tournament_id));
+	return ok;
 }
 
 bool tournament_bracket::generate_double_elimination(int tournament_id) {
-	return seed_bracket_matches(tournament_id, true);
+	log_match_store("generate_double_start", "tournament_id=" + std::to_string(tournament_id));
+	const bool ok = seed_bracket_matches(tournament_id, true);
+	log_match_store(ok ? "generate_double_ok" : "generate_double_failed", "tournament_id=" + std::to_string(tournament_id));
+	return ok;
 }
 
 bool tournament_bracket::generate_round_robin(int tournament_id) {
-	return seed_round_robin_matches(tournament_id);
+	log_match_store("generate_round_robin_start", "tournament_id=" + std::to_string(tournament_id));
+	const bool ok = seed_round_robin_matches(tournament_id);
+	log_match_store(ok ? "generate_round_robin_ok" : "generate_round_robin_failed", "tournament_id=" + std::to_string(tournament_id));
+	return ok;
 }
 
 bool tournament_bracket::generate_swiss_round(int tournament_id) {
+	log_match_store("generate_swiss_start", "tournament_id=" + std::to_string(tournament_id));
 	if (tournament_id <= 0 || !init()) return false;
 
 	const auto participants = tournament_registration::list_checked_in_participants(tournament_id);
@@ -700,7 +719,9 @@ bool tournament_bracket::generate_swiss_round(int tournament_id) {
 		if (!clear_matches(tournament_id)) return false;
 		next_index = 0;
 	}
-	return append_generated_matches(tournament_id, next_index, new_matches);
+	const bool ok = append_generated_matches(tournament_id, next_index, new_matches);
+	log_match_store(ok ? "generate_swiss_ok" : "generate_swiss_failed", "tournament_id=" + std::to_string(tournament_id) + " new_matches=" + std::to_string(new_matches.size()));
+	return ok;
 }
 
 std::optional<tournament_bracket::StoredMatch> tournament_bracket::get_match(int tournament_id, int match_id) {
@@ -824,6 +845,7 @@ bool tournament_bracket::assign_streamed(int tournament_id, int match_id, bool s
 	sqlite3_bind_int(stmt, 3, match_id);
 	const bool success = sqlite3_step(stmt) == SQLITE_DONE && sqlite3_changes(get_db().get_handle()) > 0;
 	sqlite3_finalize(stmt);
+	log_match_store(success ? "stream_assign_ok" : "stream_assign_failed", "tournament_id=" + std::to_string(tournament_id) + " match_id=" + std::to_string(match_id) + " streamed=" + std::to_string(streamed ? 1 : 0));
 	return success;
 }
 
@@ -838,6 +860,7 @@ bool tournament_bracket::set_discord_thread(int tournament_id, int match_id, dpp
 	sqlite3_bind_int(stmt, 4, match_id);
 	const bool success = sqlite3_step(stmt) == SQLITE_DONE && sqlite3_changes(get_db().get_handle()) > 0;
 	sqlite3_finalize(stmt);
+	log_match_store(success ? "thread_set_ok" : "thread_set_failed", "tournament_id=" + std::to_string(tournament_id) + " match_id=" + std::to_string(match_id));
 	return success;
 }
 
@@ -859,6 +882,7 @@ bool tournament_bracket::mark_match_opened(int tournament_id, int match_id, int 
 	sqlite3_bind_int(stmt, 4, match_id);
 	const bool success = sqlite3_step(stmt) == SQLITE_DONE;
 	sqlite3_finalize(stmt);
+	log_match_store(success ? "match_opened_ok" : "match_opened_failed", "tournament_id=" + std::to_string(tournament_id) + " match_id=" + std::to_string(match_id));
 	return success;
 }
 
@@ -879,6 +903,7 @@ bool tournament_bracket::mark_checked_in(int tournament_id, int match_id, const 
 	sqlite3_bind_int(stmt, 2, match_id);
 	const bool success = sqlite3_step(stmt) == SQLITE_DONE && sqlite3_changes(get_db().get_handle()) > 0;
 	sqlite3_finalize(stmt);
+	log_match_store(success ? "match_checkin_ok" : "match_checkin_failed", "tournament_id=" + std::to_string(tournament_id) + " match_id=" + std::to_string(match_id) + " discord_id=" + discord_id);
 	return success;
 }
 
@@ -890,15 +915,18 @@ bool tournament_bracket::forfeit_player(
 ) {
 	auto match = get_match(tournament_id, match_id);
 	if (!match) return false;
-	return forfeit_match_player(
+	const bool ok = forfeit_match_player(
 		*match,
 		discord_id,
 		reason.empty() ? "forfeit" : reason,
 		tournament_registration::ParticipantStatus::Dropped
 	);
+	log_match_store(ok ? "forfeit_ok" : "forfeit_failed", "tournament_id=" + std::to_string(tournament_id) + " match_id=" + std::to_string(match_id) + " discord_id=" + discord_id + " reason=" + reason);
+	return ok;
 }
 
 int tournament_bracket::resolve_due_no_shows(int tournament_id, int now) {
+	log_match_store("resolve_no_shows_start", "tournament_id=" + std::to_string(tournament_id) + " now=" + std::to_string(now));
 	if (tournament_id <= 0 || now <= 0 || !init()) {
 		return 0;
 	}
@@ -980,10 +1008,12 @@ int tournament_bracket::resolve_due_no_shows(int tournament_id, int now) {
 		}
 	}
 
+	log_match_store("resolve_no_shows_done", "tournament_id=" + std::to_string(tournament_id) + " resolved=" + std::to_string(resolved));
 	return resolved;
 }
 
 bool tournament_bracket::report_match(int tournament_id, int match_id, int score_a, int score_b) {
+	log_match_store("report_start", "tournament_id=" + std::to_string(tournament_id) + " match_id=" + std::to_string(match_id) + " score_a=" + std::to_string(score_a) + " score_b=" + std::to_string(score_b));
 	auto match = get_match(tournament_id, match_id);
 	if (!match
 		|| match->player_a_id.empty()
@@ -993,6 +1023,7 @@ bool tournament_bracket::report_match(int tournament_id, int match_id, int score
 		|| score_a < 0
 		|| score_b < 0
 		|| score_a == score_b) {
+		log_match_store_error("report_rejected", "tournament_id=" + std::to_string(tournament_id) + " match_id=" + std::to_string(match_id));
 		return false;
 	}
 
@@ -1041,10 +1072,13 @@ bool tournament_bracket::report_match(int tournament_id, int match_id, int score
 		}
 	}
 
-	return transaction.commit();
+	const bool ok = transaction.commit();
+	log_match_store(ok ? "report_ok" : "report_failed", "tournament_id=" + std::to_string(tournament_id) + " match_id=" + std::to_string(match_id) + " winner_id=" + winner);
+	return ok;
 }
 
 bool tournament_bracket::correct_match_report(int tournament_id, int match_id, int score_a, int score_b) {
+	log_match_store("correct_report_start", "tournament_id=" + std::to_string(tournament_id) + " match_id=" + std::to_string(match_id));
 	auto match = get_match(tournament_id, match_id);
 	if (!match
 		|| !is_completed(match->state)
@@ -1106,7 +1140,9 @@ bool tournament_bracket::correct_match_report(int tournament_id, int match_id, i
 		return false;
 	}
 
-	return report_match(tournament_id, match_id, score_a, score_b);
+	const bool ok = report_match(tournament_id, match_id, score_a, score_b);
+	log_match_store(ok ? "correct_report_ok" : "correct_report_failed", "tournament_id=" + std::to_string(tournament_id) + " match_id=" + std::to_string(match_id));
+	return ok;
 }
 
 std::string tournament_bracket::state_to_string(StoredMatchState state) {

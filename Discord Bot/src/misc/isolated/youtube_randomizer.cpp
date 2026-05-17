@@ -1,5 +1,6 @@
 #include "misc/isolated/youtube_randomizer.hpp"
 
+#include "core/Log.hpp"
 #include "misc/sqlite-user.hpp"
 
 #include <cstdlib>
@@ -26,6 +27,10 @@ namespace {
 
 	bool bind_text(sqlite3_stmt* stmt, int index, const std::string& value) {
 		return sqlite3_bind_text(stmt, index, value.c_str(), -1, SQLITE_TRANSIENT) == SQLITE_OK;
+	}
+
+	void log_youtube_action(const std::string& action, const std::string& detail = "") {
+		bot_log::info("misc-youtube-randomizer", action, detail);
 	}
 
 	std::optional<misc_isolated_youtube_randomizer::MusicLink> row_to_link(sqlite3_stmt* stmt) {
@@ -59,11 +64,13 @@ namespace misc_isolated_youtube_randomizer {
 
 	bool init() {
 		if (!enabled()) {
+			log_youtube_action("init_skipped", "reason=disabled");
 			return false;
 		}
 
 		auto& db = misc_user_sqlite::user_db();
 		if (!db.ok()) {
+			log_youtube_action("init_failed", "reason=user_db_not_open");
 			return false;
 		}
 
@@ -86,6 +93,10 @@ namespace misc_isolated_youtube_randomizer {
 			"guild_id, enabled"
 		);
 
+		log_youtube_action(
+			table_ok && index_ok ? "init_ok" : "init_failed",
+			"table_ok=" + std::to_string(table_ok ? 1 : 0) + " index_ok=" + std::to_string(index_ok ? 1 : 0)
+		);
 		return table_ok && index_ok;
 	}
 
@@ -97,11 +108,13 @@ namespace misc_isolated_youtube_randomizer {
 		int added_at
 	) {
 		if (guild_id.empty() || title.empty() || youtube_url.empty() || added_by.empty()) {
+			log_youtube_action("add_link_rejected", "reason=missing_required_field");
 			return false;
 		}
 
 		auto& db = misc_user_sqlite::user_db();
 		if (!db.ok()) {
+			log_youtube_action("add_link_failed", "reason=user_db_not_open");
 			return false;
 		}
 
@@ -112,6 +125,7 @@ namespace misc_isolated_youtube_randomizer {
 			"VALUES (?, ?, ?, ?, ?, 1);";
 
 		if (sqlite3_prepare_v2(db.get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+			log_youtube_action("add_link_failed", "reason=prepare_failed");
 			return false;
 		}
 
@@ -123,6 +137,7 @@ namespace misc_isolated_youtube_randomizer {
 			sqlite3_bind_int(stmt, 5, added_at) == SQLITE_OK;
 
 		const bool ok = bound && sqlite3_step(stmt) == SQLITE_DONE;
+		log_youtube_action(ok ? "add_link_ok" : "add_link_failed", "guild_id=" + guild_id);
 		sqlite3_finalize(stmt);
 		return ok;
 	}
@@ -130,11 +145,13 @@ namespace misc_isolated_youtube_randomizer {
 	std::vector<MusicLink> list_links(const std::string& guild_id, bool include_disabled) {
 		std::vector<MusicLink> links;
 		if (guild_id.empty()) {
+			log_youtube_action("list_links_rejected", "reason=missing_guild_id");
 			return links;
 		}
 
 		auto& db = misc_user_sqlite::user_db();
 		if (!db.ok()) {
+			log_youtube_action("list_links_failed", "reason=user_db_not_open");
 			return links;
 		}
 
@@ -146,12 +163,14 @@ namespace misc_isolated_youtube_randomizer {
 			"ORDER BY id ASC;";
 
 		if (sqlite3_prepare_v2(db.get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+			log_youtube_action("list_links_failed", "reason=prepare_failed guild_id=" + guild_id);
 			return links;
 		}
 
 		if (!bind_text(stmt, 1, guild_id) ||
 			sqlite3_bind_int(stmt, 2, include_disabled ? 1 : 0) != SQLITE_OK) {
 			sqlite3_finalize(stmt);
+			log_youtube_action("list_links_failed", "reason=bind_failed guild_id=" + guild_id);
 			return links;
 		}
 
@@ -163,28 +182,34 @@ namespace misc_isolated_youtube_randomizer {
 		}
 
 		sqlite3_finalize(stmt);
+		log_youtube_action("list_links_ok", "guild_id=" + guild_id + " count=" + std::to_string(links.size()));
 		return links;
 	}
 
 	std::optional<MusicLink> random_link(const std::string& guild_id) {
 		auto links = list_links(guild_id, false);
 		if (links.empty()) {
+			log_youtube_action("random_link_empty", "guild_id=" + guild_id);
 			return std::nullopt;
 		}
 
 		std::random_device device;
 		std::mt19937 generator(device());
 		std::uniform_int_distribution<std::size_t> distribution(0, links.size() - 1);
-		return links[distribution(generator)];
+		auto selected = links[distribution(generator)];
+		log_youtube_action("random_link_ok", "guild_id=" + guild_id + " id=" + std::to_string(selected.id));
+		return selected;
 	}
 
 	bool set_link_enabled(const std::string& guild_id, int id, bool link_enabled) {
 		if (guild_id.empty() || id <= 0) {
+			log_youtube_action("set_link_enabled_rejected", "reason=invalid_input");
 			return false;
 		}
 
 		auto& db = misc_user_sqlite::user_db();
 		if (!db.ok()) {
+			log_youtube_action("set_link_enabled_failed", "reason=user_db_not_open");
 			return false;
 		}
 
@@ -195,6 +220,7 @@ namespace misc_isolated_youtube_randomizer {
 			"WHERE guild_id = ? AND id = ?;";
 
 		if (sqlite3_prepare_v2(db.get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+			log_youtube_action("set_link_enabled_failed", "reason=prepare_failed guild_id=" + guild_id + " id=" + std::to_string(id));
 			return false;
 		}
 
@@ -204,6 +230,10 @@ namespace misc_isolated_youtube_randomizer {
 			sqlite3_bind_int(stmt, 3, id) == SQLITE_OK;
 
 		const bool ok = bound && sqlite3_step(stmt) == SQLITE_DONE;
+		log_youtube_action(
+			ok ? "set_link_enabled_ok" : "set_link_enabled_failed",
+			"guild_id=" + guild_id + " id=" + std::to_string(id) + " enabled=" + std::to_string(link_enabled ? 1 : 0)
+		);
 		sqlite3_finalize(stmt);
 		return ok;
 	}

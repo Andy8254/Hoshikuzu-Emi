@@ -60,3 +60,4 @@ Read these files first:
 - `docs/conventions/messages.md`
 - `docs/operations/security.md`
 - `docs/operations/human_in_loop_scripting.md`
+- `docs/operations/log_capture.md`

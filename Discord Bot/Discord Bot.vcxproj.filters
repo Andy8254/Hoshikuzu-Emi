@@ -137,6 +137,9 @@
     <ClInclude Include="include\core\Fundamentals.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="include\core\Log.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="include\core\Localization.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>

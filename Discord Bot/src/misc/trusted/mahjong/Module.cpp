@@ -1,5 +1,7 @@
 #include "misc/trusted/mahjong/Module.hpp"
 
+#include "core/Log.hpp"
+
 #include <algorithm>
 #include <cstdlib>
 #include <sstream>
@@ -22,6 +24,10 @@ namespace {
 		const std::string value = getenv_string(name);
 		return value == "1" || value == "true" || value == "TRUE" || value == "yes" || value == "on";
 	}
+
+	void log_mahjong_action(const std::string& action, const std::string& detail = "") {
+		bot_log::info("trusted-mahjong", action, detail);
+	}
 }
 
 namespace misc_trusted_mahjong {
@@ -31,7 +37,9 @@ namespace misc_trusted_mahjong {
 	}
 
 	bool init() {
-		return enabled();
+		const bool is_enabled = enabled();
+		log_mahjong_action(is_enabled ? "init_enabled" : "init_skipped", is_enabled ? "commands=not_exposed" : "reason=disabled");
+		return is_enabled;
 	}
 
 	std::string module_status() {
@@ -53,6 +61,10 @@ namespace misc_trusted_mahjong {
 		const std::vector<PlayerSeat>& seeded_players
 	) {
 		if (seeded_players.size() != TABLE_SIZE) {
+			log_mahjong_action(
+				"playoff_table_draft_rejected",
+				"table_id=" + std::to_string(table_id) + " player_count=" + std::to_string(seeded_players.size())
+			);
 			return std::nullopt;
 		}
 
@@ -65,6 +77,7 @@ namespace misc_trusted_mahjong {
 			draft.players[static_cast<std::size_t>(i)].seat = i + 1;
 		}
 
+		log_mahjong_action("playoff_table_draft_ok", "table_id=" + std::to_string(table_id));
 		return draft;
 	}
 

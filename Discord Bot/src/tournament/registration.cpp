@@ -1,3 +1,4 @@
+#include "core/Log.hpp"
 #include "core/sqlite.hpp"
 #include "tournament/registration.hpp"
 #include <algorithm>
@@ -62,6 +63,7 @@ namespace {
 	}
 
 	tournament_registration::ParticipantResult fail(const std::string& message) {
+		bot_log::warn("tournament-registration", "operation_failed", "message=\"" + message + "\"");
 		return tournament_registration::ParticipantResult{ false, message, std::nullopt };
 	}
 
@@ -69,6 +71,7 @@ namespace {
 		const std::string& message,
 		const tournament_registration::ParticipantRecord& participant
 	) {
+		bot_log::info("tournament-registration", "operation_ok", "tournament_id=" + std::to_string(participant.tournament_id) + " discord_id=" + participant.discord_id + " message=\"" + message + "\"");
 		return tournament_registration::ParticipantResult{ true, message, participant };
 	}
 }
@@ -124,6 +127,7 @@ bool tournament_registration::init() {
 }
 
 tournament_registration::ParticipantResult tournament_registration::register_player(const RegistrationRequest& request) {
+	bot_log::info("tournament-registration", "register_start", "tournament_id=" + std::to_string(request.tournament_id) + " discord_id=" + request.discord_id);
 	if (request.tournament_id <= 0 || request.discord_id.empty()) {
 		return fail("Invalid tournament or player.");
 	}
@@ -181,6 +185,7 @@ tournament_registration::ParticipantResult tournament_registration::register_pla
 }
 
 tournament_registration::ParticipantResult tournament_registration::unregister_player(int tournament_id, const std::string& discord_id) {
+	bot_log::info("tournament-registration", "unregister_start", "tournament_id=" + std::to_string(tournament_id) + " discord_id=" + discord_id);
 	if (tournament_id <= 0 || discord_id.empty()) {
 		return fail("Invalid tournament or player.");
 	}
@@ -219,6 +224,7 @@ tournament_registration::ParticipantResult tournament_registration::unregister_p
 }
 
 tournament_registration::ParticipantResult tournament_registration::check_in_player(const CheckInRequest& request) {
+	bot_log::info("tournament-registration", "checkin_start", "tournament_id=" + std::to_string(request.tournament_id) + " discord_id=" + request.discord_id + " staff_override=" + std::to_string(request.staff_override ? 1 : 0));
 	if (request.tournament_id <= 0 || request.discord_id.empty()) {
 		return fail("Invalid tournament or player.");
 	}
@@ -278,6 +284,7 @@ tournament_registration::ParticipantResult tournament_registration::check_in_pla
 }
 
 tournament_registration::ParticipantResult tournament_registration::undo_check_in(int tournament_id, const std::string& discord_id) {
+	bot_log::info("tournament-registration", "undo_checkin_start", "tournament_id=" + std::to_string(tournament_id) + " discord_id=" + discord_id);
 	if (tournament_id <= 0 || discord_id.empty()) {
 		return fail("Invalid tournament or player.");
 	}

@@ -1,5 +1,6 @@
 #include "tetrio/TetrioService.hpp"
 #include "core/api_fetcher.hpp"
+#include "core/Log.hpp"
 #include <nlohmann/json.hpp>
 #include <algorithm>
 
@@ -29,19 +30,23 @@ static bool ok_response(const json& j) {
 
 std::optional<TetrioProfile> TetrioService::fetch_user(const std::string& username) {
     TetrioProfile profile;
+    bot_log::info("tetrio", "fetch_user_start", "username=" + username);
 
     auto user_res = HttpClient::get("https://ch.tetr.io/api/users/" + username);
 
     if (!user_res.error.empty() || user_res.status_code != 200) {
+        bot_log::error("tetrio", "fetch_user_failed", "username=" + username + " status=" + std::to_string(user_res.status_code) + " error=\"" + user_res.error + "\"");
         return std::nullopt;
     }
 
     json user_j = json::parse(user_res.body, nullptr, false);
     if (user_j.is_discarded() || !ok_response(user_j)) {
+        bot_log::error("tetrio", "fetch_user_parse_failed", "username=" + username);
         return std::nullopt;
     }
 
     if (!user_j.contains("data") || !user_j["data"].is_object()) {
+        bot_log::error("tetrio", "fetch_user_data_missing", "username=" + username);
         return std::nullopt;
     }
 
@@ -58,9 +63,11 @@ std::optional<TetrioProfile> TetrioService::fetch_user(const std::string& userna
 
     if (!league_res.error.empty()) {
         profile.league_status = "league_fetch_failed";
+        bot_log::error("tetrio", "fetch_league_failed", "username=" + profile.username + " error=\"" + league_res.error + "\"");
     }
     else if (league_res.status_code != 200) {
         profile.league_status = "league_http_" + std::to_string(league_res.status_code);
+        bot_log::warn("tetrio", "fetch_league_http_status", "username=" + profile.username + " status=" + std::to_string(league_res.status_code));
     }
     else {
         json league_j = json::parse(league_res.body, nullptr, false);
@@ -102,14 +109,18 @@ std::optional<TetrioProfile> TetrioService::fetch_user(const std::string& userna
         }
         else if (league_j.is_discarded()) {
             profile.league_status = "league_parse_failed";
+            bot_log::error("tetrio", "fetch_league_parse_failed", "username=" + profile.username);
         }
         else if (!ok_response(league_j)) {
             profile.league_status = "league_success_false";
+            bot_log::warn("tetrio", "fetch_league_success_false", "username=" + profile.username);
         }
         else {
             profile.league_status = "league_data_missing";
+            bot_log::warn("tetrio", "fetch_league_data_missing", "username=" + profile.username);
         }
     }
 
+    bot_log::info("tetrio", "fetch_user_done", "username=" + profile.username + " league_status=" + profile.league_status);
     return profile;
 }

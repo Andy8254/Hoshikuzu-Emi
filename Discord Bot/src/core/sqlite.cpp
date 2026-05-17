@@ -1,7 +1,7 @@
 #include "core/sqlite.hpp"
+#include "core/Log.hpp"
 #include "core/SensitiveText.hpp"
 #include <cstdlib>
-#include <iostream>
 #include <ctime>
 #include <unordered_set>
 
@@ -24,6 +24,14 @@ namespace {
         free(override_path);
         return result;
     }
+
+    void log_sqlite(const std::string& action, const std::string& detail = "") {
+        bot_log::info("sqlite", action, detail);
+    }
+
+    void log_sqlite_error(const std::string& action, const std::string& detail = "") {
+        bot_log::error("sqlite", action, detail);
+    }
 }
 
 Database::Database(const std::string& db_path) {
@@ -36,10 +44,11 @@ Database::Database(const std::string& db_path) {
 
     //Open Connection
     if (sqlite3_open(resolved_db_path.c_str(), &db) != SQLITE_OK) {
-        std::cerr << "CRITICAL: SQLITE Open Failed: " << sqlite3_errmsg(db) << std::endl;
+        log_sqlite_error("open_failed", std::string("path=") + resolved_db_path + " error=\"" + (db ? sqlite3_errmsg(db) : "no_handle") + "\"");
         db = nullptr;
     }
     else {
+        log_sqlite("open_ok", "path=" + resolved_db_path);
         sqlite3_busy_timeout(db, 5000);
         execute("PRAGMA foreign_keys = ON;");
         execute("PRAGMA journal_mode = WAL;");
@@ -70,6 +79,7 @@ Database::Database(const std::string& db_path) {
             "FOREIGN KEY (t_id) REFERENCES tournaments(id) ON DELETE CASCADE);";
 
         execute(master_schema);
+        log_sqlite("master_schema_initialized", "path=" + resolved_db_path);
     }
 }
 
@@ -81,7 +91,7 @@ bool Database::execute(const std::string& sql) {
     char* zErrmsg = 0;
     int rc = sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &zErrmsg);
     if (rc != SQLITE_OK) {
-        std::cerr << "SQL Error: " << zErrmsg << std::endl;
+        log_sqlite_error("execute_failed", std::string("error=\"") + (zErrmsg ? zErrmsg : sqlite3_errmsg(db)) + "\"");
         sqlite3_free(zErrmsg);
         return false;
     }
@@ -92,8 +102,10 @@ bool PlayerManager::register_info(dpp::snowflake id) {
     sqlite3_stmt* stmt;
     const char* sql = "INSERT OR IGNORE INTO player_links (discord_id) VALUES (?);";
 
-    if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK)
+    if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        log_sqlite_error("player_register_prepare_failed", "discord_id=" + std::to_string(id));
         return false;
+    }
 
     sqlite3_bind_int64(stmt, 1, (long long)id);
     int rc = sqlite3_step(stmt);
@@ -101,6 +113,7 @@ bool PlayerManager::register_info(dpp::snowflake id) {
     bool was_inserted = (sqlite3_changes(get_db().get_handle()) > 0);
 
     sqlite3_finalize(stmt);
+    log_sqlite(rc == SQLITE_DONE ? "player_register_done" : "player_register_failed", "discord_id=" + std::to_string(id) + " inserted=" + std::to_string(was_inserted ? 1 : 0));
     return (rc == SQLITE_DONE && was_inserted);
 }
 
@@ -108,18 +121,25 @@ bool PlayerManager::change_info(dpp::snowflake id, const std::string& platform, 
     // Whitelist check
     bool ok = false;
     for (const auto& p : allowed) if (p == platform) ok = true;
-    if (!ok) return false;
+    if (!ok) {
+        log_sqlite_error("player_change_rejected", "discord_id=" + std::to_string(id) + " platform=" + platform);
+        return false;
+    }
 
     sqlite3_stmt* stmt;
     std::string sql = "UPDATE player_links SET " + platform + " = ?, last_sync = ? WHERE discord_id = ?;";
 
-    sqlite3_prepare_v2(get_db().get_handle(), sql.c_str(), -1, &stmt, nullptr);
+    if (sqlite3_prepare_v2(get_db().get_handle(), sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+        log_sqlite_error("player_change_prepare_failed", "discord_id=" + std::to_string(id) + " platform=" + platform);
+        return false;
+    }
     sqlite3_bind_text(stmt, 1, value.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_int64(stmt, 2, (long long)time(nullptr));
     sqlite3_bind_int64(stmt, 3, (long long)id);
 
     int rc = sqlite3_step(stmt);
     sqlite3_finalize(stmt);
+    log_sqlite(rc == SQLITE_DONE ? "player_change_done" : "player_change_failed", "discord_id=" + std::to_string(id) + " platform=" + platform);
     return rc == SQLITE_DONE;
 }
 
@@ -128,8 +148,10 @@ bool PlayerManager::delete_info(dpp::snowflake id) {
     // This will also wipe tournament entries if ON DELETE CASCADE is set
     const char* sql = "DELETE FROM player_links WHERE discord_id = ?;";
 
-    if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK)
+    if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        log_sqlite_error("player_delete_prepare_failed", "discord_id=" + std::to_string(id));
         return false;
+    }
 
     sqlite3_bind_int64(stmt, 1, (long long)id);
     int rc = sqlite3_step(stmt);
@@ -137,6 +159,7 @@ bool PlayerManager::delete_info(dpp::snowflake id) {
     int affected = sqlite3_changes(get_db().get_handle());
 
     sqlite3_finalize(stmt);
+    log_sqlite(rc == SQLITE_DONE ? "player_delete_done" : "player_delete_failed", "discord_id=" + std::to_string(id) + " affected=" + std::to_string(affected));
     return (rc == SQLITE_DONE && affected > 0);
 }
 
@@ -170,6 +193,7 @@ dpp::snowflake PlayerManager::find_by_platform(const std::string& platform, cons
     //Duplicates Unavoidable?
     static const std::unordered_set<std::string> allowed_platforms = { "tetrio_id", "jstris_id", "ppt2_id", "tec_id", "tetra_id", "tgm_id", "ctwc_id", "other_id" };
     if (allowed_platforms.find(platform) == allowed_platforms.end()) {
+        log_sqlite_error("player_find_rejected", "platform=" + platform);
         return 0; // Or throw an exception
     }
 
@@ -212,13 +236,18 @@ bool PlayerManager::exists(dpp::snowflake id) {
 bool PlayerManager::unlink_platform(dpp::snowflake id, const std::string& platform) {
     bool ok = false;
     for (const auto& p : allowed) if (p == platform) ok = true;
-    if (!ok) return false;
+    if (!ok) {
+        log_sqlite_error("player_unlink_rejected", "discord_id=" + std::to_string(id) + " platform=" + platform);
+        return false;
+    }
 
     sqlite3_stmt* stmt;
     std::string sql = "UPDATE player_links SET " + platform + " = NULL, last_sync = ? WHERE discord_id = ?;";
 
-    if (sqlite3_prepare_v2(get_db().get_handle(), sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK)
+    if (sqlite3_prepare_v2(get_db().get_handle(), sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+        log_sqlite_error("player_unlink_prepare_failed", "discord_id=" + std::to_string(id) + " platform=" + platform);
         return false;
+    }
 
     sqlite3_bind_int64(stmt, 1, (long long)time(nullptr));
     sqlite3_bind_int64(stmt, 2, (long long)id);
@@ -227,6 +256,7 @@ bool PlayerManager::unlink_platform(dpp::snowflake id, const std::string& platfo
     int affected = sqlite3_changes(get_db().get_handle());
     sqlite3_finalize(stmt);
 
+    log_sqlite(rc == SQLITE_DONE ? "player_unlink_done" : "player_unlink_failed", "discord_id=" + std::to_string(id) + " platform=" + platform + " affected=" + std::to_string(affected));
     return (rc == SQLITE_DONE && affected > 0);
 }
 

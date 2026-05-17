@@ -1,4 +1,5 @@
 #include "tournament/manage.hpp"
+#include "core/Log.hpp"
 #include "core/sqlite.hpp"
 #include "tournament/bracket/MatchStore.hpp"
 #include "tournament/registration.hpp"
@@ -60,6 +61,14 @@ namespace {
 			|| format == "round_robin"
 			|| format == "swiss";
 	}
+
+	void log_manage(const std::string& action, const std::string& detail = "") {
+		bot_log::info("tournament-manage", action, detail);
+	}
+
+	void log_manage_error(const std::string& action, const std::string& detail = "") {
+		bot_log::error("tournament-manage", action, detail);
+	}
 }
 
 bool tournament_manage::init() {
@@ -120,14 +129,17 @@ std::optional<int> tournament_manage::create_tournament(
 	const std::string& status
 ) {
 	if (name.empty()) {
+		log_manage_error("create_rejected", "reason=empty_name");
 		return std::nullopt;
 	}
 
 	if (!is_supported_format(format)) {
+		log_manage_error("create_rejected", "reason=unsupported_format format=" + format);
 		return std::nullopt;
 	}
 
 	if (!init()) {
+		log_manage_error("create_failed", "reason=init_failed");
 		return std::nullopt;
 	}
 
@@ -150,10 +162,13 @@ std::optional<int> tournament_manage::create_tournament(
 	sqlite3_finalize(stmt);
 
 	if (!success) {
+		log_manage_error("create_failed", "reason=step_or_bind_failed name=\"" + name + "\"");
 		return std::nullopt;
 	}
 
-	return static_cast<int>(sqlite3_last_insert_rowid(get_db().get_handle()));
+	const int id = static_cast<int>(sqlite3_last_insert_rowid(get_db().get_handle()));
+	log_manage("create_ok", "tournament_id=" + std::to_string(id) + " format=" + format + " game_type=" + game_type);
+	return id;
 }
 
 bool tournament_manage::update_tournament(int tournament_id, const TournamentUpdate& update) {
@@ -221,7 +236,9 @@ bool tournament_manage::update_tournament(int tournament_id, const TournamentUpd
 	const int changed = sqlite3_changes(get_db().get_handle());
 	sqlite3_finalize(stmt);
 
-	return success && changed > 0;
+	const bool ok = success && changed > 0;
+	log_manage(ok ? "update_ok" : "update_failed", "tournament_id=" + std::to_string(tournament_id) + " changed=" + std::to_string(changed));
+	return ok;
 }
 
 bool tournament_manage::delete_tournament(int tournament_id) {
@@ -246,11 +263,15 @@ bool tournament_manage::delete_tournament(int tournament_id) {
 	const int changed = sqlite3_changes(get_db().get_handle());
 	sqlite3_finalize(stmt);
 
-	return success && changed > 0;
+	const bool ok = success && changed > 0;
+	log_manage(ok ? "delete_ok" : "delete_failed", "tournament_id=" + std::to_string(tournament_id) + " changed=" + std::to_string(changed));
+	return ok;
 }
 
 bool tournament_manage::clear_all_tournament_data() {
+	log_manage("clear_all_start");
 	if (!init()) {
+		log_manage_error("clear_all_failed", "reason=init_failed");
 		return false;
 	}
 
@@ -258,11 +279,13 @@ bool tournament_manage::clear_all_tournament_data() {
 		|| !tournament_ruleset::init()
 		|| !tournament_bracket::init()
 		|| !GuildConfigManager::init()) {
+		log_manage_error("clear_all_failed", "reason=dependency_init_failed");
 		return false;
 	}
 
 	DatabaseTransaction transaction(get_db());
 	if (!transaction.ok()) {
+		log_manage_error("clear_all_failed", "reason=transaction_begin_failed");
 		return false;
 	}
 
@@ -283,10 +306,13 @@ bool tournament_manage::clear_all_tournament_data() {
 		");";
 
 	if (!get_db().execute(sql)) {
+		log_manage_error("clear_all_failed", "reason=execute_failed");
 		return false;
 	}
 
-	return transaction.commit();
+	const bool ok = transaction.commit();
+	log_manage(ok ? "clear_all_ok" : "clear_all_failed", ok ? "" : "reason=commit_failed");
+	return ok;
 }
 
 bool tournament_manage::set_tournament_format(int tournament_id, const std::string& format) {

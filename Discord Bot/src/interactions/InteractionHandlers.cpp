@@ -1,5 +1,6 @@
 ﻿#include "interactions/InteractionHandlers.hpp"
 #include "core/CommandRegistry.hpp"
+#include "core/Log.hpp"
 #include "core/Localization.hpp"
 #include "core/sqlite.hpp"
 #include "tetrio/TetrioService.hpp"
@@ -10,7 +11,6 @@
 #include <cctype>
 #include <ctime>
 #include <exception>
-#include <iostream>
 #include <optional>
 #include <sstream>
 #include <vector>
@@ -553,25 +553,28 @@ namespace {
 
 void register_interaction_handlers(dpp::cluster& bot) {
     bot.on_slashcommand([](const dpp::slashcommand_t& event) {
+        const auto name = event.command.get_command_name();
+        bot_log::info("interaction", "slash_start", "command=" + name + " guild_id=" + std::to_string(event.command.guild_id) + " user_id=" + std::to_string(event.command.usr.id));
         try {
-            auto name = event.command.get_command_name();
             auto it = handlers.find(name);
             if (it != handlers.end()) {
                 it->second(event);
+                bot_log::info("interaction", "slash_dispatched", "command=" + name);
             }
             else {
+                bot_log::warn("interaction", "slash_unknown", "command=" + name);
                 event.reply(localization::message_text(event.command.guild_id, event.command.usr.id, "error.unknown_command"));
             }
         }
         catch (const std::exception& e) {
-            std::cerr << "Slash command failed: " << e.what() << std::endl;
+            bot_log::error("interaction", "slash_failed", "command=" + name + " error=\"" + e.what() + "\"");
             event.reply(
                 dpp::message(std::string("Command failed: ") + e.what())
                 .set_flags(dpp::m_ephemeral)
             );
         }
         catch (...) {
-            std::cerr << "Slash command failed with an unknown exception." << std::endl;
+            bot_log::error("interaction", "slash_failed_unknown", "command=" + name);
             event.reply(
                 dpp::message("Command failed with an unknown error.")
                 .set_flags(dpp::m_ephemeral)
@@ -580,15 +583,18 @@ void register_interaction_handlers(dpp::cluster& bot) {
     });
 
     bot.on_button_click([&bot](const dpp::button_click_t& event) {
+        bot_log::info("interaction", "button_start", "custom_id=" + event.custom_id + " guild_id=" + std::to_string(event.command.guild_id) + " user_id=" + std::to_string(event.command.usr.id));
         try {
             if (handle_staff_dashboard_button(event)) {
+                bot_log::info("interaction", "button_dispatched", "custom_id=" + event.custom_id + " handler=staff_dashboard");
                 return;
             }
 
             handle_tournament_button(bot, event);
+            bot_log::info("interaction", "button_dispatched", "custom_id=" + event.custom_id + " handler=tournament");
         }
         catch (const std::exception& e) {
-            std::cerr << "Button interaction failed: " << e.what() << std::endl;
+            bot_log::error("interaction", "button_failed", "custom_id=" + event.custom_id + " error=\"" + e.what() + "\"");
             event.reply(
                 dpp::message(std::string("Button failed: ") + e.what())
                 .set_flags(dpp::m_ephemeral)
@@ -597,25 +603,31 @@ void register_interaction_handlers(dpp::cluster& bot) {
     });
 
     bot.on_form_submit([&bot](const dpp::form_submit_t& event) {
+        bot_log::info("interaction", "form_start", "custom_id=" + event.custom_id + " guild_id=" + std::to_string(event.command.guild_id) + " user_id=" + std::to_string(event.command.usr.id));
         try {
             const auto parts = split_custom_id(event.custom_id);
             if (parts.size() == 4 && parts[0] == "tournament" && parts[1] == "register_modal") {
                 handle_registration_submit(bot, event, std::stoi(parts[2]));
+                bot_log::info("interaction", "form_dispatched", "custom_id=" + event.custom_id + " handler=register_modal");
                 return;
             }
 
             if (parts.size() == 4 && parts[0] == "tournament" && parts[1] == "report_modal") {
                 handle_report_submit(event, std::stoi(parts[2]), std::stoi(parts[3]));
+                bot_log::info("interaction", "form_dispatched", "custom_id=" + event.custom_id + " handler=report_modal");
                 return;
             }
 
             if (parts.size() == 4 && parts[0] == "tournament" && parts[1] == "forfeit_modal") {
                 handle_forfeit_submit(bot, event, std::stoi(parts[2]), std::stoi(parts[3]));
+                bot_log::info("interaction", "form_dispatched", "custom_id=" + event.custom_id + " handler=forfeit_modal");
                 return;
             }
+
+            bot_log::warn("interaction", "form_unknown", "custom_id=" + event.custom_id);
         }
         catch (const std::exception& e) {
-            std::cerr << "Form submit failed: " << e.what() << std::endl;
+            bot_log::error("interaction", "form_failed", "custom_id=" + event.custom_id + " error=\"" + e.what() + "\"");
             event.reply(
                 dpp::message(std::string("Form failed: ") + e.what())
                 .set_flags(dpp::m_ephemeral)
