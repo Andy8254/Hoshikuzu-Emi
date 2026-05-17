@@ -1,7 +1,7 @@
 # Hoshikuzu Emi
 An all-in-one tournament/community management bot agent
 
-Version Beta 1 Interim 4 (v. 0.5.4)
+Version Beta 1 Interim 6 (v. 0.5.6)
 
 ## Overview
 This lightweight C++-based bot agent provides all-in-one management tailored to tournaments and e-sports-centric servers.
