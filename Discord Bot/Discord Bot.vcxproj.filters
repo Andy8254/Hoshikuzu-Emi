@@ -66,6 +66,9 @@
     <ClCompile Include="src\core\security\PermissionManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\core\security\SpamHoneypot.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="src\misc\sqlite-user.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -153,6 +156,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\core\security\PermissionManager.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\core\security\SpamHoneypot.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\misc\sqlite-user.hpp">

@@ -14,5 +14,8 @@
 - `secondary_language`: 서버 보조 표시 언어를 설정하거나 해제합니다.
 - `modlog_set`: 서버 관리 로그 채널을 설정합니다.
 - `modlog_clear`: 서버 관리 로그 채널을 해제합니다.
+- `honeypot_set`: 자동 차단용 허니팟 채널을 활성화합니다.
+- `honeypot_clear`: 허니팟 채널을 비활성화합니다.
+- `honeypot_show`: 허니팟 채널 상태를 표시합니다.
 ## 도움말
 주어진 명령어에 대한 자세한 정보는 `/bot help category:settings command:<command>`를 통해 확인하실 수 있습니다.

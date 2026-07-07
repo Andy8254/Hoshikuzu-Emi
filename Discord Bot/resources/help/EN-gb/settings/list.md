@@ -14,5 +14,8 @@ Set roles first, then configure language and moderation log channels. Use `/sett
 - `secondary_language`: Sets or clears the server secondary display language.
 - `modlog_set`: Sets the moderation log channel.
 - `modlog_clear`: Clears the moderation log channel.
+- `honeypot_set`: Arms an automatic-ban honeypot channel.
+- `honeypot_clear`: Disarms the honeypot channel.
+- `honeypot_show`: Shows honeypot channel status.
 ## Help
 Use `/bot help category:settings command:<command>` for a command-specific page.

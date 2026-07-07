@@ -754,7 +754,8 @@ bool ServerSettingsManager::init() {
         "staff_role_id INTEGER,"
         "language TEXT DEFAULT 'EN-gb',"
         "secondary_language TEXT DEFAULT NULL,"
-        "modlog_channel_id INTEGER"
+        "modlog_channel_id INTEGER,"
+        "honeypot_channel_id INTEGER"
         ");";
 
     if (!get_db().execute(sql)) {
@@ -768,7 +769,8 @@ bool ServerSettingsManager::init() {
         "staff_role_id INTEGER",
         "language TEXT DEFAULT 'EN-gb'",
         "secondary_language TEXT DEFAULT NULL",
-        "modlog_channel_id INTEGER"
+        "modlog_channel_id INTEGER",
+        "honeypot_channel_id INTEGER"
     };
 
     for (const char* migration : migrations) {
@@ -1055,6 +1057,69 @@ dpp::snowflake ServerSettingsManager::get_modlog_channel(dpp::snowflake guild_id
     sqlite3_stmt* stmt;
     dpp::snowflake result = 0;
     const char* sql = "SELECT modlog_channel_id FROM server_settings WHERE guild_id = ? LIMIT 1;";
+
+    if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) == SQLITE_OK) {
+        sqlite3_bind_int64(stmt, 1, guild_id);
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            result = static_cast<dpp::snowflake>(sqlite3_column_int64(stmt, 0));
+        }
+    }
+
+    sqlite3_finalize(stmt);
+    return result;
+}
+
+bool ServerSettingsManager::set_honeypot_channel(dpp::snowflake guild_id, dpp::snowflake channel_id) {
+    if (!init() || !guild_id || !channel_id) {
+        return false;
+    }
+
+    sqlite3_stmt* stmt;
+    const char* sql =
+        "INSERT INTO server_settings (guild_id, honeypot_channel_id) "
+        "VALUES (?, ?) "
+        "ON CONFLICT(guild_id) DO UPDATE SET honeypot_channel_id = excluded.honeypot_channel_id;";
+
+    if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        return false;
+    }
+
+    sqlite3_bind_int64(stmt, 1, guild_id);
+    sqlite3_bind_int64(stmt, 2, channel_id);
+    const bool success = sqlite3_step(stmt) == SQLITE_DONE;
+    sqlite3_finalize(stmt);
+    return success;
+}
+
+bool ServerSettingsManager::clear_honeypot_channel(dpp::snowflake guild_id) {
+    if (!init() || !guild_id) {
+        return false;
+    }
+
+    sqlite3_stmt* stmt;
+    const char* sql =
+        "INSERT INTO server_settings (guild_id, honeypot_channel_id) "
+        "VALUES (?, NULL) "
+        "ON CONFLICT(guild_id) DO UPDATE SET honeypot_channel_id = NULL;";
+
+    if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        return false;
+    }
+
+    sqlite3_bind_int64(stmt, 1, guild_id);
+    const bool success = sqlite3_step(stmt) == SQLITE_DONE;
+    sqlite3_finalize(stmt);
+    return success;
+}
+
+dpp::snowflake ServerSettingsManager::get_honeypot_channel(dpp::snowflake guild_id) {
+    if (!init()) {
+        return 0;
+    }
+
+    sqlite3_stmt* stmt;
+    dpp::snowflake result = 0;
+    const char* sql = "SELECT honeypot_channel_id FROM server_settings WHERE guild_id = ? LIMIT 1;";
 
     if (sqlite3_prepare_v2(get_db().get_handle(), sql, -1, &stmt, nullptr) == SQLITE_OK) {
         sqlite3_bind_int64(stmt, 1, guild_id);

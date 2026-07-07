@@ -493,7 +493,8 @@ int sql_reliability::run(const std::string& db_path) {
 	}), "player_links required columns");
 	ctx.require(has_columns(db, "server_settings", {
 		"guild_id", "owner_id", "admin_role_id", "moderator_role_id",
-		"staff_role_id", "language", "secondary_language", "modlog_channel_id"
+		"staff_role_id", "language", "secondary_language", "modlog_channel_id",
+		"honeypot_channel_id"
 	}), "server_settings required columns");
 	ctx.require(has_columns(db, "user_settings", { "user_id", "language" }), "user_settings required columns");
 	ctx.require(has_columns(db, "guild_config", {
@@ -543,6 +544,9 @@ int sql_reliability::run(const std::string& db_path) {
 	ctx.require(ServerSettingsManager::set_language(1001, "KO-kr"), "set server language");
 	ctx.require(ServerSettingsManager::set_secondary_language(1001, "KO-kr"), "set secondary language");
 	ctx.require(ServerSettingsManager::clear_secondary_language(1001), "clear secondary language");
+	ctx.require(ServerSettingsManager::set_honeypot_channel(1001, 3005), "set honeypot channel");
+	ctx.require(ServerSettingsManager::get_honeypot_channel(1001) == 3005, "read honeypot channel");
+	ctx.require(ServerSettingsManager::clear_honeypot_channel(1001), "clear honeypot channel");
 	ctx.require(UserSettingsManager::set_language(2002, "EN-gb"), "set user language");
 	ctx.require(UserSettingsManager::clear_language(2002), "clear user language");
 	ctx.require(GuildConfigManager::set_tournament_channel(1001, 3003), "set tournament channel");

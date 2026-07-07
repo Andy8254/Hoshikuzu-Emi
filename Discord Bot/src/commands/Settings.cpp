@@ -93,7 +93,8 @@ namespace {
 			.add_field("Admin role", role_display(ServerSettingsManager::get_admin_role(guild_id)), true)
 			.add_field("Moderator role", role_display(ServerSettingsManager::get_moderator_role(guild_id)), true)
 			.add_field("Staff role", role_display(ServerSettingsManager::get_staff_role(guild_id)), true)
-			.add_field("Moderation log", ServerSettingsManager::get_modlog_channel(guild_id) ? "<#" + std::to_string(ServerSettingsManager::get_modlog_channel(guild_id)) + ">" : "Not configured", true);
+			.add_field("Moderation log", ServerSettingsManager::get_modlog_channel(guild_id) ? "<#" + std::to_string(ServerSettingsManager::get_modlog_channel(guild_id)) + ">" : "Not configured", true)
+			.add_field("Honeypot channel", ServerSettingsManager::get_honeypot_channel(guild_id) ? "<#" + std::to_string(ServerSettingsManager::get_honeypot_channel(guild_id)) + ">" : "Not configured", true);
 	}
 
 	dpp::component dashboard_buttons() {
@@ -257,6 +258,47 @@ namespace {
 
 		event.reply("Moderation log channel cleared.");
 	}
+
+	void handle_honeypot_set(const dpp::slashcommand_t& event, const dpp::command_data_option& subcommand) {
+		if (!is_settings_admin(event)) {
+			reply_ephemeral(event, localization::user_text(event.command.guild_id, event.command.usr.id, "settings.permission.admin"));
+			return;
+		}
+
+		const dpp::snowflake channel_id = get_snowflake_option(subcommand, "channel");
+		if (!ServerSettingsManager::set_honeypot_channel(event.command.guild_id, channel_id)) {
+			reply_ephemeral(event, "Could not arm the honeypot channel.");
+			return;
+		}
+
+		event.reply("Honeypot armed for <#" + std::to_string(channel_id) + ">. Non-exempt users who post there will be banned automatically.");
+	}
+
+	void handle_honeypot_clear(const dpp::slashcommand_t& event) {
+		if (!is_settings_admin(event)) {
+			reply_ephemeral(event, localization::user_text(event.command.guild_id, event.command.usr.id, "settings.permission.admin"));
+			return;
+		}
+
+		if (!ServerSettingsManager::clear_honeypot_channel(event.command.guild_id)) {
+			reply_ephemeral(event, "Could not disarm the honeypot channel.");
+			return;
+		}
+
+		event.reply("Honeypot disarmed.");
+	}
+
+	void handle_honeypot_show(const dpp::slashcommand_t& event) {
+		if (!is_settings_moderator(event)) {
+			reply_ephemeral(event, localization::user_text(event.command.guild_id, event.command.usr.id, "settings.permission.staff"));
+			return;
+		}
+
+		const dpp::snowflake channel_id = ServerSettingsManager::get_honeypot_channel(event.command.guild_id);
+		event.reply(channel_id
+			? "Honeypot channel: <#" + std::to_string(channel_id) + ">. Non-exempt users who post there will be banned automatically."
+			: "Honeypot channel is not configured.");
+	}
 }
 
 void register_settings_commands(dpp::cluster& bot) {
@@ -275,6 +317,9 @@ void register_settings_commands(dpp::cluster& bot) {
 		if (subcommand.name == "secondary_language") return handle_secondary_language(event, subcommand);
 		if (subcommand.name == "modlog_set") return handle_modlog_set(event, subcommand);
 		if (subcommand.name == "modlog_clear") return handle_modlog_clear(event);
+		if (subcommand.name == "honeypot_set") return handle_honeypot_set(event, subcommand);
+		if (subcommand.name == "honeypot_clear") return handle_honeypot_clear(event);
+		if (subcommand.name == "honeypot_show") return handle_honeypot_show(event);
 
 		reply_ephemeral(event, localization::user_text(event.command.guild_id, event.command.usr.id, "settings.unknown"));
 	};

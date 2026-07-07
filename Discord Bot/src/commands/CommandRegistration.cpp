@@ -178,6 +178,16 @@ void register_discord_commands(dpp::cluster& bot, dpp::snowflake mod_channel_id)
             dpp::command_option settings_modlog_clear(dpp::co_sub_command, "modlog_clear", "Clear moderation log channel");
             settings.add_option(settings_modlog_clear);
 
+            dpp::command_option settings_honeypot_set(dpp::co_sub_command, "honeypot_set", "Arm an automatic-ban honeypot channel");
+            settings_honeypot_set.add_option(dpp::command_option(dpp::co_channel, "channel", "Channel where any non-exempt message triggers a ban", true));
+            settings.add_option(settings_honeypot_set);
+
+            dpp::command_option settings_honeypot_clear(dpp::co_sub_command, "honeypot_clear", "Disarm the honeypot channel");
+            settings.add_option(settings_honeypot_clear);
+
+            dpp::command_option settings_honeypot_show(dpp::co_sub_command, "honeypot_show", "Show honeypot channel status");
+            settings.add_option(settings_honeypot_show);
+
             dpp::slashcommand mod("mod", "Manual moderation tools", app_id);
 
             dpp::command_option mod_warn(dpp::co_sub_command, "warn", "Record a warning");

@@ -45,6 +45,40 @@ $env:BOT_DATA_KEY = [Convert]::ToBase64String($bytes)
 
 For a real test event, store the generated value somewhere private before starting the bot.
 
+## Moderation Honeypot
+
+The bot can arm one automatic-ban honeypot channel per server:
+
+```text
+/settings honeypot_set channel:#channel
+/settings honeypot_show
+/settings honeypot_clear
+```
+
+When a non-exempt user sends any message in the configured channel, the bot:
+
+- deletes the triggering message,
+- bans the user,
+- creates a moderation case with action `auto_ban`,
+- posts the case to the configured moderation log channel, if one exists.
+
+Exempt users:
+
+- bots,
+- the server owner,
+- the bot developer,
+- configured admin, moderator, and staff roles.
+
+Operational guidance:
+
+- Keep the honeypot channel private or clearly outside normal user workflows.
+- Use `/settings honeypot_show` after permission changes.
+- Configure `/settings modlog_set` before arming the honeypot.
+- Make sure the bot role can delete messages and ban users below its role.
+- Use `/mod unban` for false positives.
+
+Current failure behavior is intentionally minimal: failed bans are not yet mirrored to a fallback audit channel, and failed message deletion or modlog posting may be silent. Treat this as a beta hardening candidate before broad deployment.
+
 ## Stable vs Canary
 
 Use separate:
@@ -100,5 +134,6 @@ Still beta1 candidates:
 - Central message sanitization helper
 - Central audit log helper
 - Role hierarchy checks for moderation live actions
+- Rich error logging for automated honeypot delete/ban/modlog failures
 - Separate DB path for canary/stable
 - Data signature verification for external submissions

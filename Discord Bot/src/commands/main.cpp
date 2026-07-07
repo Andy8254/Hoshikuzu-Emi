@@ -3,6 +3,7 @@
 #include "commands/Discord_Commands.hpp"
 #include "core/Config.hpp"
 #include "core/SqlReliabilityCheck.hpp"
+#include "core/security/SpamHoneypot.hpp"
 #include "interactions/InteractionHandlers.hpp"
 #include <cstdlib>
 #include <string>
@@ -30,6 +31,7 @@ int main(int argc, char** argv) {
 
     register_discord_commands(bot, MOD_CHANNEL_ID);
     register_interaction_handlers(bot);
+    register_spam_honeypot(bot);
 
     bot.start(dpp::st_wait);
 }

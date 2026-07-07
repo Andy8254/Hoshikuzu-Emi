@@ -114,6 +114,10 @@ public:
 	static bool set_modlog_channel(dpp::snowflake guild_id, dpp::snowflake channel_id);
 	static bool clear_modlog_channel(dpp::snowflake guild_id);
 	static dpp::snowflake get_modlog_channel(dpp::snowflake guild_id);
+
+	static bool set_honeypot_channel(dpp::snowflake guild_id, dpp::snowflake channel_id);
+	static bool clear_honeypot_channel(dpp::snowflake guild_id);
+	static dpp::snowflake get_honeypot_channel(dpp::snowflake guild_id);
 	static Database& get_db();
 };
 
